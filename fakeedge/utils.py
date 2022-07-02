@@ -551,3 +551,38 @@ def concat_graphs(graphs: List[Data]):
     rst = Data(x=concat_x, edge_index=concat_edge_index, edge_mask= concat_edge_mask,
                 n_id= concat_n_id, mapping= concat_mapping, num_nodes=concat_n_id.shape[0], z=concat_z)
     return rst
+
+
+def edge_injection(num_layers, data, node_pairs, plus: bool, drnl:bool):
+    """
+        edge_index : (2,num_edges)
+        node_pairs : (num_pairs,2)
+    """
+    graphs = []
+    if plus:
+        f = plus_edge
+    else:
+        f = minus_edge
+    for pair in node_pairs:
+        one_graph = f(data, pair, num_layers, drnl) 
+        graphs.append(one_graph)
+    return graphs
+
+def process_graph(split, data, split_edge, num_hops, drnl, neg_sampler_name=None,num_neg=None):
+    pos_edge, neg_edge = get_pos_neg_edges(split, split_edge,
+                                            edge_index=data.edge_index,
+                                            num_nodes=data.num_nodes,
+                                            neg_sampler_name=neg_sampler_name,
+                                            num_neg=num_neg)
+    if split == 'train':
+    
+        # remove edge on training's pos edge
+        pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=False,drnl=drnl) # len == pos_trian_edge.shape[0]
+        # add edge on training's neg edge
+        neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl) # len == neg_train_edge.shape[0] * num_neg
+    else:
+        # radd edge on val/test's pos edge
+        pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=True,drnl=drnl) # len == pos_trian_edge.shape[0]
+        # radd edge on val/test's neg edge
+        neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl) # len == neg_train_edge.shape[0] * num_neg
+    return (pos_graphs_minus, neg_graphs_plus)

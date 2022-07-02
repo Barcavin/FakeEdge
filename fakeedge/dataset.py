@@ -2,12 +2,14 @@ import torch
 from torch_geometric.data import InMemoryDataset
 from torch_sparse import coalesce
 
-from fakeedge.utils import get_pos_neg_edges
+from fakeedge.utils import get_pos_neg_edges, edge_injection, process_graph
 
-class SEALDataset(InMemoryDataset):
+
+
+class FakeEdgeDataset(InMemoryDataset):
     def __init__(self, root, data, split_edge, num_hops, split='train', 
-                 node_label='drnl', ratio_per_hop=1.0, 
-                 max_nodes_per_hop=None):
+                 node_label='drnl', ratio_per_hop=1.0,
+                 max_nodes_per_hop=None, num_neg=1,neg_sampler_name='global'):
         self.data = data
         self.split_edge = split_edge
         self.num_hops = num_hops
@@ -15,39 +17,29 @@ class SEALDataset(InMemoryDataset):
         self.node_label = node_label
         self.ratio_per_hop = ratio_per_hop
         self.max_nodes_per_hop = max_nodes_per_hop
-        super(SEALDataset, self).__init__(root)
-        data = torch.load(self.processed_paths[0])
+        self.num_neg = num_neg
+        self.neg_sampler_name = neg_sampler_name
+        super(FakeEdgeDataset, self).__init__(root)
+        # data = torch.load(self.processed_paths[0])
         self.pos = data["pos"]
         self.neg = data["neg"]
 
     @property
     def processed_file_names(self):
-        if self.percent == 100:
-            name = 'SEAL_{}_data'.format(self.split)
+        if self.split=="train":
+            name = 'SEAL_{}_data_neg_{}'.format(self.split, self.num_neg)
         else:
-            name = 'SEAL_{}_data_{}'.format(self.split, self.percent)
+            name = 'SEAL_{}_data'.format(self.split)
         name += '.pt'
         return [name]
 
     def process(self):
-        pos_edge, neg_edge = get_pos_neg_edges(self.split, self.split_edge, 
-                                               self.data.edge_index, 
-                                               self.data.num_nodes, 
-                                               self.percent)
-
-        # if self.use_coalesce:  # compress mutli-edge into edge with weight
-        #     self.data.edge_index, self.data.edge_weight = coalesce(
-        #         self.data.edge_index, self.data.edge_weight, 
-        #         self.data.num_nodes, self.data.num_nodes)
-        
-        # Extract enclosing subgraphs for pos and neg edges
-        pos_list = extract_enclosing_subgraphs(
-            pos_edge, A, self.data.x, 1, self.num_hops, self.node_label, 
-            self.ratio_per_hop, self.max_nodes_per_hop, self.directed, A_csc)
-        neg_list = extract_enclosing_subgraphs(
-            neg_edge, A, self.data.x, 0, self.num_hops, self.node_label, 
-            self.ratio_per_hop, self.max_nodes_per_hop, self.directed, A_csc)
-
-        collate = self.collate(pos_list + neg_list)
-        torch.save(collate, self.processed_paths[0])
-        del pos_list, neg_list
+        pos_graphs_minus,neg_graphs_plus = process_graph(self.split, self.data,self.split_edge,
+                    self.num_hops,self.neg_sampler_name,
+                    self.num_neg)
+        dump = {
+            "pos":pos_graphs_minus,
+            "neg":neg_graphs_plus
+        }
+        torch.save(dump, self.processed_paths[0])
+        del pos_graphs_minus, neg_graphs_plus

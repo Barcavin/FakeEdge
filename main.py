@@ -9,7 +9,7 @@ from ogb.linkproppred import Evaluator
 import wandb
 from fakeedge.logger import Logger
 from fakeedge.model import BaseModel
-from fakeedge.utils import data_process
+from fakeedge.utils import data_process, process_graph
 
 
 def argument():
@@ -152,11 +152,13 @@ def main():
             scheduler = torch.optim.lr_scheduler.ExponentialLR(model.optimizer, gamma=args.scheduler_gamma)
         else:
             scheduler = None
-        train_loader = model.get_data_list("train",data,split_edge,
-                               neg_sampler_name=args.neg_sampler,
-                               num_neg=args.num_neg)
-        val_loader = model.get_data_list("valid",data, split_edge)
-        test_loader = model.get_data_list("test",data, split_edge)
+        train_list = process_graph("train",data,split_edge, 
+                                model.encoder.num_layers, args.drnl,
+                               neg_sampler_name=args.neg_sampler,num_neg=args.num_neg)
+        val_list = process_graph("valid",data, split_edge, 
+                                model.encoder.num_layers, args.drnl)
+        test_list = process_graph("test",data, split_edge, 
+                                model.encoder.num_layers, args.drnl)
         start_time = time.time()
 
         for epoch in range(1, 1 + args.epochs):
@@ -164,14 +166,16 @@ def main():
                 cur_lr = scheduler.get_last_lr()[0]
             else:
                 cur_lr = args.lr
-            loss = model.train(data, args.batch_size, args.num_neg, train_loader)
+            loss = model.train(data, args.batch_size, args.num_neg, train_list)
 
             if epoch % args.eval_steps == 0:
                 results = model.test(data,
                                      batch_size=args.batch_size,
                                      evaluator=evaluator,
                                      eval_metric=args.eval_metric,
-                                     data_loaders=(val_loader,test_loader))
+                                     val_list=val_list,
+                                     test_list=test_list,
+                                     )
                 for key, result in results.items():
                     loggers[key].add_result(run, result)
 
@@ -203,9 +207,9 @@ def main():
             torch.cuda.empty_cache()
         
         # Run finish
-        del train_loader
-        del val_loader
-        del test_loader
+        del train_list
+        del val_list
+        del test_lost
 
         for key in loggers.keys():
             print(key)

@@ -172,7 +172,7 @@ class BaseModel(object):
             loss = auc_loss(pos_out, neg_out, num_neg)
         return loss
 
-    def train(self, data, batch_size, num_neg, data_loader):
+    def train(self, data, batch_size, num_neg, train_list):
         self.encoder.train()
         self.predictor.train()
 
@@ -181,7 +181,7 @@ class BaseModel(object):
         # else:
         #     edge_weight_margin = None
         total_loss = total_examples = 0 
-        pos_train_edge, neg_train_edge = data_loader
+        pos_train_edge, neg_train_edge = train_list
         
         for perm in DataLoader(range(len(pos_train_edge)), batch_size, shuffle=True):
             self.optimizer.zero_grad()
@@ -249,11 +249,12 @@ class BaseModel(object):
         return logits
 
     @torch.no_grad()
-    def test(self, data,  batch_size, evaluator, eval_metric, data_loaders):
+    def test(self, data,  batch_size, evaluator, eval_metric, val_list, test_list):
         self.encoder.eval()
         self.predictor.eval()
 
-        (pos_valid_edge,neg_valid_edge), (pos_test_edge,neg_test_edge) = data_loaders
+        pos_valid_edge,neg_valid_edge = val_list
+        pos_test_edge,neg_test_edge = test_list
         
         if self.edge_perturbation:
             pos_valid_pred = []
@@ -357,22 +358,6 @@ class BaseModel(object):
             "predictor":self.predictor.state_dict()
         }
         torch.save(state, model_path)
-    
-
-    def edge_injection(self, data, node_pairs, plus: bool):
-        """
-            edge_index : (2,num_edges)
-            node_pairs : (num_pairs,2)
-        """
-        graphs = []
-        if plus:
-            f = plus_edge
-        else:
-            f = minus_edge
-        for pair in node_pairs:
-            one_graph = f(data, pair, self.encoder.num_layers,self.drnl) 
-            graphs.append(one_graph)
-        return graphs
 
     def edge_injection_forward(self, graph: Data):
         x = self.create_input_feat(graph)
@@ -382,30 +367,6 @@ class BaseModel(object):
         out = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
         return out
     
-    def get_data_list(self,phase,data,split_edge,
-                    neg_sampler_name="global",
-                    num_neg=None):
-        if phase == "train":
-            pos_train_edge, neg_train_edge = get_pos_neg_edges('train', split_edge,
-                                                            edge_index=data.edge_index,
-                                                            num_nodes=self.num_nodes,
-                                                            neg_sampler_name=neg_sampler_name,
-                                                            num_neg=num_neg)
-            if self.edge_perturbation:
-                pos_graphs_minus = self.edge_injection(data,pos_train_edge,False) # len == pos_trian_edge.shape[0]
-                neg_graphs_plus = self.edge_injection(data,neg_train_edge.reshape(-1,2),True) # len == neg_train_edge.shape[0] * num_neg
-                return pos_graphs_minus,neg_graphs_plus
-            else:
-                return pos_train_edge,neg_train_edge
-        else:
-            pos_edge, neg_edge = get_pos_neg_edges(phase, split_edge)
-            if self.edge_perturbation:
-                pos_graphs_minus = self.edge_injection(data,pos_edge,True) # len == pos_trian_edge.shape[0]
-                neg_graphs_plus = self.edge_injection(data,neg_edge.reshape(-1,2),True) # len == neg_train_edge.shape[0] * num_neg
-                return pos_graphs_minus,neg_graphs_plus
-            else:
-                return pos_edge, neg_edge
-
 
 
 def create_input_layer(num_nodes, num_node_feats, hidden_channels, use_node_feats=True, drnl=False,
