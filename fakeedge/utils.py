@@ -18,7 +18,7 @@ from torch_geometric.utils import (from_scipy_sparse_matrix, is_undirected,
 from torch_sparse import SparseTensor, coalesce
 from tqdm import tqdm
 
-from FakeEdge.negative_sample import (global_neg_sample, global_perm_neg_sample,
+from fakeedge.negative_sample import (global_neg_sample, global_perm_neg_sample,
                                    local_neg_sample)
 
 webhook_url="https://hooks.slack.com/services/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"

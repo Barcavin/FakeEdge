@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from torch.utils.data import DataLoader
-from FakeEdge.layer import *
-from FakeEdge.loss import *
-from FakeEdge.utils import *
+from fakeedge.layer import *
+from fakeedge.loss import *
+from fakeedge.utils import *
 
 MAX_Z = 1000
 
@@ -394,7 +394,6 @@ class BaseModel(object):
             if self.edge_perturbation:
                 pos_graphs_minus = self.edge_injection(data,pos_train_edge,False) # len == pos_trian_edge.shape[0]
                 neg_graphs_plus = self.edge_injection(data,neg_train_edge.reshape(-1,2),True) # len == neg_train_edge.shape[0] * num_neg
-                # neg_graphs_plus = [[neg_graphs_plus[i*num_neg+j]] for i in range(len(pos_graphs_minus)) for j in range(num_neg)]
                 return pos_graphs_minus,neg_graphs_plus
             else:
                 return pos_train_edge,neg_train_edge

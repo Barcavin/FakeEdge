@@ -7,9 +7,9 @@ import torch
 from ogb.linkproppred import Evaluator
 
 import wandb
-from FakeEdge.logger import Logger
-from FakeEdge.model import BaseModel
-from FakeEdge.utils import data_process
+from fakeedge.logger import Logger
+from fakeedge.model import BaseModel
+from fakeedge.utils import data_process
 
 
 def argument():
