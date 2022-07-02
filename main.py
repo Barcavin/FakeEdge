@@ -154,13 +154,13 @@ def main():
         train_list = process_graph("train",data,split_edge, 
                                 model.encoder.num_layers, args.drnl,
                                neg_sampler_name=args.neg_sampler,num_neg=args.num_neg, 
-                               save_processed= args.save_or_load_processed,save_name= args.data_name)
+                               save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         val_list = process_graph("valid",data, split_edge, 
                                 model.encoder.num_layers, args.drnl, 
-                               save_processed= args.save_or_load_processed,save_name= args.data_name)
+                               save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         test_list = process_graph("test",data, split_edge, 
                                 model.encoder.num_layers, args.drnl, 
-                               save_processed= args.save_or_load_processed,save_name= args.data_name)
+                               save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         start_time = time.time()
 
         for epoch in range(1, 1 + args.epochs):
