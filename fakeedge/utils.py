@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from argparse import Namespace
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -539,22 +540,35 @@ def edge_injection(num_layers, data, node_pairs, plus: bool, drnl:bool):
         graphs.append(one_graph)
     return graphs
 
-def process_graph(split, data, split_edge, num_hops, drnl, neg_sampler_name=None,num_neg=None):
-    pos_edge, neg_edge = get_pos_neg_edges(split, split_edge,
-                                            edge_index=data.edge_index,
-                                            num_nodes=data.num_nodes,
-                                            neg_sampler_name=neg_sampler_name,
-                                            num_neg=num_neg)
-    if split == 'train':
+def process_graph(split, data, split_edge, num_hops, drnl, neg_sampler_name=None,num_neg=None,save_or_load_processed='',save_name=None):
     
-        # remove edge on training's pos edge
-        pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=False,drnl=drnl) # len == pos_trian_edge.shape[0]
-        # add edge on training's neg edge
-        neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl) # len == neg_train_edge.shape[0] * num_neg
+    if save_or_load_processed == 'load':
+        file_path = Path(root_dir)/save_name/f"{split}_graphs.pt"
+        dump = torch.load(file_path)
+        pos_graphs_minus, neg_graphs_plus = dump['pos'], dump['neg']
     else:
-        # radd edge on val/test's pos edge
-        pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=True,drnl=drnl) # len == pos_trian_edge.shape[0]
-        # radd edge on val/test's neg edge
-        neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl) # len == neg_train_edge.shape[0] * num_neg
-    
+        pos_edge, neg_edge = get_pos_neg_edges(split, split_edge,
+                                                edge_index=data.edge_index,
+                                                num_nodes=data.num_nodes,
+                                                neg_sampler_name=neg_sampler_name,
+                                                num_neg=num_neg)
+        if split == 'train':
+            # remove edge on training's pos edge
+            pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=False,drnl=drnl) # len == pos_trian_edge.shape[0]
+            # add edge on training's neg edge
+            neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl) # len == neg_train_edge.shape[0] * num_neg
+        else:
+            # radd edge on val/test's pos edge
+            pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=True,drnl=drnl) # len == pos_trian_edge.shape[0]
+            # radd edge on val/test's neg edge
+            neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl) # len == neg_train_edge.shape[0] * num_neg
+        if save_or_load_processed == 'save':
+            assert save_name is not None
+            dump = {
+                "pos": pos_graphs_minus,
+                "neg": neg_graphs_plus
+            }
+            dir_path = Path(root_dir)/save_name
+            dir_path.make_dir(exist_ok=True)
+            torch.save(dump, dir_path / f"{split}_graphs.pt")
     return (pos_graphs_minus, neg_graphs_plus)

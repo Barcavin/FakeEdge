@@ -25,6 +25,7 @@ def argument():
     parser.add_argument('--eval_metric', type=str, default='hits')
     parser.add_argument('--res_dir', type=str, default='log')
     parser.add_argument('--pretrain_emb', type=str, default='')
+    parser.add_argument('--save_or_load_processed', type=str, default='')
     parser.add_argument('--gnn_num_layers', type=int, default=2)
     parser.add_argument('--mlp_num_layers', type=int, default=2)
     parser.add_argument('--emb_hidden_channels', type=int, default=128)
@@ -51,7 +52,6 @@ def argument():
     parser.add_argument('--eval_last_best', type=str2bool, default=False)
     parser.add_argument('--load_model', type=str2bool, default=False)
     parser.add_argument('--save_model', type=str2bool, default=False)
-    parser.add_argument('--save_processed', type=str2bool, default=False)
 
     args = parser.parse_args()
     return args
@@ -153,11 +153,14 @@ def main():
             scheduler = None
         train_list = process_graph("train",data,split_edge, 
                                 model.encoder.num_layers, args.drnl,
-                               neg_sampler_name=args.neg_sampler,num_neg=args.num_neg)
+                               neg_sampler_name=args.neg_sampler,num_neg=args.num_neg, 
+                               save_processed= args.save_or_load_processed,save_name= args.data_name)
         val_list = process_graph("valid",data, split_edge, 
-                                model.encoder.num_layers, args.drnl)
+                                model.encoder.num_layers, args.drnl, 
+                               save_processed= args.save_or_load_processed,save_name= args.data_name)
         test_list = process_graph("test",data, split_edge, 
-                                model.encoder.num_layers, args.drnl)
+                                model.encoder.num_layers, args.drnl, 
+                               save_processed= args.save_or_load_processed,save_name= args.data_name)
         start_time = time.time()
 
         for epoch in range(1, 1 + args.epochs):
