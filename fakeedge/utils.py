@@ -6,11 +6,9 @@ import numpy as np
 import scipy.sparse as ssp
 import torch
 import torch_geometric.transforms as T
-from knockknock import slack_sender
 from ogb.linkproppred import PygLinkPropPredDataset
 from scipy.sparse.csgraph import shortest_path
 from sklearn import metrics
-from torch_cluster import random_walk
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid
 from torch_geometric.utils import (from_scipy_sparse_matrix, is_undirected,
@@ -20,14 +18,8 @@ from tqdm import tqdm
 
 from fakeedge.negative_sample import (global_neg_sample, global_perm_neg_sample,
                                    local_neg_sample)
-
-webhook_url="https://hooks.slack.com/services/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"
-channel="slack-bot"
 root_dir='~/files'
 
-@slack_sender(webhook_url=webhook_url, channel=channel)
-def knock():
-    return
 
 def get_pos_neg_edges(split, split_edge, edge_index=None, num_nodes=None, neg_sampler_name=None, num_neg=None):
     if 'edge' in split_edge['train']:
@@ -147,26 +139,6 @@ def adj_normalization(adj_t):
     deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
     adj_t = deg_inv_sqrt.view(-1, 1) * adj_t
     return adj_t
-
-
-def generate_neg_dist_table(num_nodes, adj_t, power=0.75, table_size=1e8):
-    table_size = int(table_size)
-    adj_t = adj_t.set_diag()
-    node_degree = adj_t.sum(dim=1).to(torch.float)
-    node_degree = node_degree.pow(power)
-
-    norm = float((node_degree).sum())  # float is faster than tensor when visited
-    node_degree = node_degree.tolist()  # list has fastest visit speed
-    sample_table = np.zeros(table_size, dtype=np.int32)
-    p = 0
-    i = 0
-    for j in range(num_nodes):
-        p += node_degree[j] / norm
-        while i < table_size and float(i) / float(table_size) < p:
-            sample_table[i] = j
-            i += 1
-    sample_table = torch.from_numpy(sample_table)
-    return sample_table
 
 def get_default_args():
     default_args = {
@@ -404,43 +376,6 @@ def k_hop_subgraph(node_idx, num_hops, edge_index, max_nodes_per_hop = None,num_
 
     return subset, edge_index, inv, edge_mask
 
-
-"Code adopted and implemented from https://github.com/muhanzhang/SEAL"
-
-def drnl_node_labeling(edge_index, src, dst, num_nodes):
-
-    edge_weight = torch.ones(edge_index.size(1), dtype=int)
-    adj = ssp.csr_matrix(
-            (edge_weight, (edge_index[0], edge_index[1])), 
-            shape=(num_nodes, num_nodes))
-    # Double Radius Node Labeling (DRNL).
-    src, dst = (dst, src) if src > dst else (src, dst)
-
-    idx = list(range(src)) + list(range(src + 1, adj.shape[0]))
-    adj_wo_src = adj[idx, :][:, idx]
-
-    idx = list(range(dst)) + list(range(dst + 1, adj.shape[0]))
-    adj_wo_dst = adj[idx, :][:, idx]
-
-    dist2src = shortest_path(adj_wo_dst, directed=False, unweighted=True, indices=src)
-    dist2src = np.insert(dist2src, dst, 0, axis=0)
-    dist2src = torch.from_numpy(dist2src)
-
-    dist2dst = shortest_path(adj_wo_src, directed=False, unweighted=True, indices=dst-1)
-    dist2dst = np.insert(dist2dst, src, 0, axis=0)
-    dist2dst = torch.from_numpy(dist2dst)
-
-    dist = dist2src + dist2dst
-    dist_over_2, dist_mod_2 = torch.div(dist, 2, rounding_mode='trunc'), dist % 2
-
-    z = 1 + torch.min(dist2src, dist2dst)
-    z += dist_over_2 * (dist_over_2 + dist_mod_2 - 1)
-    z[src] = 1.
-    z[dst] = 1.
-    z[torch.isnan(z)] = 0.
-    return z.to(torch.int)
-
-
 def plus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=None):
     """
         p_edge : shape : (2,)
@@ -514,6 +449,42 @@ def minus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=No
     return data
 
 
+"Code adopted and implemented from https://github.com/muhanzhang/SEAL"
+
+def drnl_node_labeling(edge_index, src, dst, num_nodes):
+
+    edge_weight = torch.ones(edge_index.size(1), dtype=int)
+    adj = ssp.csr_matrix(
+            (edge_weight, (edge_index[0], edge_index[1])), 
+            shape=(num_nodes, num_nodes))
+    # Double Radius Node Labeling (DRNL).
+    src, dst = (dst, src) if src > dst else (src, dst)
+
+    idx = list(range(src)) + list(range(src + 1, adj.shape[0]))
+    adj_wo_src = adj[idx, :][:, idx]
+
+    idx = list(range(dst)) + list(range(dst + 1, adj.shape[0]))
+    adj_wo_dst = adj[idx, :][:, idx]
+
+    dist2src = shortest_path(adj_wo_dst, directed=False, unweighted=True, indices=src)
+    dist2src = np.insert(dist2src, dst, 0, axis=0)
+    dist2src = torch.from_numpy(dist2src)
+
+    dist2dst = shortest_path(adj_wo_src, directed=False, unweighted=True, indices=dst-1)
+    dist2dst = np.insert(dist2dst, src, 0, axis=0)
+    dist2dst = torch.from_numpy(dist2dst)
+
+    dist = dist2src + dist2dst
+    dist_over_2, dist_mod_2 = torch.div(dist, 2, rounding_mode='trunc'), dist % 2
+
+    z = 1 + torch.min(dist2src, dist2dst)
+    z += dist_over_2 * (dist_over_2 + dist_mod_2 - 1)
+    z[src] = 1.
+    z[dst] = 1.
+    z[torch.isnan(z)] = 0.
+    return z.to(torch.int)
+
+
 def concat_graphs(graphs: List[Data]):
     """
         Concatenate subgraphs to a large disconnected graph.
@@ -585,4 +556,5 @@ def process_graph(split, data, split_edge, num_hops, drnl, neg_sampler_name=None
         pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=True,drnl=drnl) # len == pos_trian_edge.shape[0]
         # radd edge on val/test's neg edge
         neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl) # len == neg_train_edge.shape[0] * num_neg
+    
     return (pos_graphs_minus, neg_graphs_plus)

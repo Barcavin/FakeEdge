@@ -14,7 +14,7 @@ from fakeedge.utils import data_process, process_graph
 
 def argument():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--encoder', type=str, default='SAGE')
+    parser.add_argument('--encoder', type=str, default='GATv2')
     parser.add_argument('--predictor', type=str, default='MLP')
     parser.add_argument('--optimizer', type=str, default='Adam')
     parser.add_argument('--loss_func', type=str, default='AUC')
@@ -35,15 +35,15 @@ def argument():
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=2e-4)
-    parser.add_argument('--num_neg', type=int, default=1)
+    parser.add_argument('--num_neg', type=int, default=3)
     parser.add_argument('--neg_sampler', type=str, default='global')
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--eval_steps', type=int, default=5)
     parser.add_argument('--runs', type=int, default=1)
     parser.add_argument('--year', type=int, default=-1)
     parser.add_argument('--device', type=int, default=0)
-    parser.add_argument('--scheduler_gamma', type=float, default=1)
-    parser.add_argument('--use_node_feats', type=str2bool, default=False)
+    parser.add_argument('--scheduler_gamma', type=float, default=0.99)
+    parser.add_argument('--use_node_feats', type=str2bool, default=True)
     parser.add_argument('--use_coalesce', type=str2bool, default=False)
     parser.add_argument('--train_node_emb', type=str2bool, default=False)
     parser.add_argument('--drnl', type=str2bool, default=True)
@@ -51,6 +51,7 @@ def argument():
     parser.add_argument('--eval_last_best', type=str2bool, default=False)
     parser.add_argument('--load_model', type=str2bool, default=False)
     parser.add_argument('--save_model', type=str2bool, default=False)
+    parser.add_argument('--save_processed', type=str2bool, default=False)
 
     args = parser.parse_args()
     return args
@@ -69,7 +70,7 @@ def str2bool(v):
 def main():
     args = argument()
     print(args)
-    wandb.init(project="PLNLP", entity='kevindong',group=args.data_name)
+    wandb.init(project="FakeEdge", entity='kevindong',group=args.data_name)
     wandb.config.update(args)
 
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
