@@ -117,10 +117,8 @@ class BaseModel(object):
             torch.nn.init.xavier_uniform_(self.drnl_emb.weight)
 
     def create_input_feat(self, data):
-        if self.edge_perturbation:
-            nodes = data.n_id.to(self.device)
-        else:
-            nodes = torch.arange(0,self.num_nodes).to(self.device)
+        # nodes = torch.arange(0,self.num_nodes).to(self.device)
+        nodes = data.n_id.to(self.device)
         input_feat = []
         if self.use_node_feats:
             input_feat.append(data.x.to(self.device))

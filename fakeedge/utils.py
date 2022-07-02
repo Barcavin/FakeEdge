@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from fakeedge.negative_sample import (global_neg_sample, global_perm_neg_sample,
                                    local_neg_sample)
-root_dir='~/files'
+root_dir= Path.home()/'files'
 
 
 def get_pos_neg_edges(split, split_edge, edge_index=None, num_nodes=None, neg_sampler_name=None, num_neg=None):
@@ -544,7 +544,7 @@ def edge_injection(num_layers, data, node_pairs, plus: bool, drnl:bool):
 def process_graph(split, data, split_edge, num_hops, drnl, neg_sampler_name=None,num_neg=None,save_or_load_processed='',save_name=None):
     
     if save_or_load_processed == 'load':
-        file_path = Path(root_dir)/save_name/f"{split}_graphs.pt"
+        file_path = root_dir/save_name/f"{split}_graphs.pt"
         dump = torch.load(file_path)
         pos_graphs_minus, neg_graphs_plus = dump['pos'], dump['neg']
     else:
@@ -569,7 +569,7 @@ def process_graph(split, data, split_edge, num_hops, drnl, neg_sampler_name=None
                 "pos": pos_graphs_minus,
                 "neg": neg_graphs_plus
             }
-            dir_path = Path(root_dir)/save_name
-            dir_path.make_dir(exist_ok=True)
+            dir_path = root_dir/save_name
+            dir_path.mkdir(exist_ok=True)
             torch.save(dump, dir_path / f"{split}_graphs.pt")
     return (pos_graphs_minus, neg_graphs_plus)

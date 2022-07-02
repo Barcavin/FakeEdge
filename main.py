@@ -210,7 +210,7 @@ def main():
         # Run finish
         del train_list
         del val_list
-        del test_lost
+        del test_list
 
         for key in loggers.keys():
             print(key)
