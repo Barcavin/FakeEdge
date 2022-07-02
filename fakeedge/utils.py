@@ -535,7 +535,8 @@ def edge_injection(num_layers, data, node_pairs, plus: bool, drnl:bool):
         f = plus_edge
     else:
         f = minus_edge
-    for pair in node_pairs:
+    tqdm_iterate = tqdm(node_pairs)
+    for pair in tqdm_iterate:
         one_graph = f(data, pair, num_layers, drnl) 
         graphs.append(one_graph)
     return graphs
