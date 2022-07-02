@@ -45,7 +45,7 @@ class BaseModel(object):
     def __init__(self, lr, dropout, grad_clip_norm, gnn_num_layers, mlp_num_layers, emb_hidden_channels,
                  gnn_hidden_channels, mlp_hidden_channels, num_nodes, num_node_feats, gnn_encoder_name,
                  predictor_name, loss_func, optimizer_name, device, use_node_feats, train_node_emb,
-                 pretrain_emb=None, edge_perturbation=False, drnl=False, weight_decay=0):
+                 pretrain_emb=None, drnl=False, weight_decay=0):
         # track args
         self.meta = locals().copy()
         self.meta.pop("self")
@@ -60,7 +60,6 @@ class BaseModel(object):
         self.train_node_emb = train_node_emb
         self.clip_norm = grad_clip_norm
         self.device = device
-        self.edge_perturbation = edge_perturbation
         self.weight_decay = weight_decay
         self.drnl = drnl
 
@@ -93,19 +92,15 @@ class BaseModel(object):
                                                 predictor_name=predictor_name).to(device)
 
         # semantic attention
-        if edge_perturbation:
-            self.semantic_att = SemanticAttention(in_size=gnn_hidden_channels).to(device)
-        else:
-            self.semantic_att = None
+        self.semantic_att = SemanticAttention(in_size=gnn_hidden_channels).to(device)
 
         # Parameters and Optimizer
-        self.para_list = list(self.encoder.parameters()) + list(self.predictor.parameters())
+        self.para_list = list(self.encoder.parameters()) + list(self.predictor.parameters()) + list(self.semantic_att.parameters())
+
         if self.emb:
             self.para_list += list(self.emb.parameters())
         if self.drnl_emb:
             self.para_list += list(self.drnl_emb.parameters())
-        if self.semantic_att:
-            self.para_list += list(self.semantic_att.parameters())
         
         self.setup_optimizer()
 
@@ -114,13 +109,12 @@ class BaseModel(object):
     def param_init(self):
         self.encoder.reset_parameters()
         self.predictor.reset_parameters()
+        self.semantic_att.reset_parameters()
         self.setup_optimizer()
         if self.emb is not None:
             torch.nn.init.xavier_uniform_(self.emb.weight)
         if self.drnl_emb is not None:
             torch.nn.init.xavier_uniform_(self.drnl_emb.weight)
-        if self.semantic_att is not None:
-            self.semantic_att.reset_parameters()
 
     def create_input_feat(self, data):
         if self.edge_perturbation:
@@ -172,39 +166,26 @@ class BaseModel(object):
             loss = auc_loss(pos_out, neg_out, num_neg)
         return loss
 
-    def train(self, data, batch_size, num_neg, train_list):
+    def train(self, batch_size, num_neg, train_list):
         self.encoder.train()
         self.predictor.train()
+        self.semantic_att.train()
 
-        # if 'weight' in split_edge['train']:
-        #     edge_weight_margin = split_edge['train']['weight'].to(self.device)
-        # else:
-        #     edge_weight_margin = None
         total_loss = total_examples = 0 
         pos_train_edge, neg_train_edge = train_list
         
         for perm in DataLoader(range(len(pos_train_edge)), batch_size, shuffle=True):
             self.optimizer.zero_grad()
 
-            if self.edge_perturbation:
-                batch_pos_graphs_minus = [pos_train_edge[i] for i in perm]
-                batch_neg_graphs_plus = [neg_train_edge[i*num_neg+j] for i in perm for j in range(num_neg)]
+            batch_pos_graphs_minus = [pos_train_edge[i] for i in perm]
+            batch_neg_graphs_plus = [neg_train_edge[i*num_neg+j] for i in perm for j in range(num_neg)]
 
-                pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-                neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
+            pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
+            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
 
-                pos_out = self.edge_injection_forward(pos_g)
-                neg_out = self.edge_injection_forward(neg_g)
-            else:
-                input_feat = self.create_input_feat(data)
-                h = self.encoder(input_feat, data.adj_t.to(self.device))
-                pos_edge = pos_train_edge[perm].t().to(self.device)
-                neg_edge = torch.reshape(neg_train_edge[perm], (-1, 2)).t().to(self.device)
+            pos_out = self.batch_forward(pos_g)
+            neg_out = self.batch_forward(neg_g)
 
-                pos_out = self.predictor(h[pos_edge[0]], h[pos_edge[1]])
-                neg_out = self.predictor(h[neg_edge[0]], h[neg_edge[1]])
-
-            # weight_margin = edge_weight_margin[perm] if edge_weight_margin is not None else None
 
             loss = self.calculate_loss(pos_out, neg_out, num_neg)#, margin=weight_margin)
             loss.backward()
@@ -222,90 +203,47 @@ class BaseModel(object):
         return total_loss / total_examples
 
     @torch.no_grad()
-    def batch_predict(self, h, edges, batch_size):
-        preds = []
-        for perm in DataLoader(range(edges.size(0)), batch_size):
-            edge = edges[perm].t()
-            preds += [self.predictor(h[edge[0]], h[edge[1]]).squeeze().cpu()]
-        pred = torch.cat(preds, dim=0)
-        return pred
-
-    @torch.no_grad()
-    def predict(self, data, edge_s, batch_size):
-        """
-            edge_s (num_edges x 2)
-        """
+    def test(self, batch_size, evaluator, eval_metric, val_list, test_list):
         self.encoder.eval()
         self.predictor.eval()
-
-        input_feat = self.create_input_feat(data)
-        h = self.encoder(input_feat, data.adj_t.to(self.device))
-        # The default index of unseen nodes is -1,
-        # hidden representations of unseen nodes is the average of all seen node representations
-        mean_h = torch.mean(h, dim=0, keepdim=True)
-        h = torch.cat([h, mean_h], dim=0)
-
-        logits = self.batch_predict(h, edge_s, batch_size)
-        return logits
-
-    @torch.no_grad()
-    def test(self, data,  batch_size, evaluator, eval_metric, val_list, test_list):
-        self.encoder.eval()
-        self.predictor.eval()
+        self.semantic_att.eval()
 
         pos_valid_edge,neg_valid_edge = val_list
         pos_test_edge,neg_test_edge = test_list
+
+        pos_valid_pred = []
+        neg_valid_pred = []
+
+        for perm in DataLoader(range(len(pos_valid_edge)), batch_size):
+            batch_pos_graphs_minus = [pos_valid_edge[i] for i in perm]
+            batch_neg_graphs_plus = [neg_valid_edge[i] for i in perm]
+
+            pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
+            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
+
+            pos_out = self.batch_forward(pos_g).cpu()
+            neg_out = self.batch_forward(neg_g).cpu()
+            pos_valid_pred.append(pos_out)
+            neg_valid_pred.append(neg_out)
+        pos_valid_pred = torch.cat(pos_valid_pred, dim=0)
+        neg_valid_pred = torch.cat(neg_valid_pred, dim=0)
         
-        if self.edge_perturbation:
-            pos_valid_pred = []
-            neg_valid_pred = []
+        pos_test_pred = []
+        neg_test_pred = []
 
-            for perm in DataLoader(range(len(pos_valid_edge)), batch_size):
-                batch_pos_graphs_minus = [pos_valid_edge[i] for i in perm]
-                batch_neg_graphs_plus = [neg_valid_edge[i] for i in perm]
+        for perm in DataLoader(range(len(pos_test_edge)), batch_size):
+            batch_pos_graphs_minus = [pos_test_edge[i] for i in perm]
+            batch_neg_graphs_plus = [neg_test_edge[i] for i in perm]
 
-                pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-                neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
+            pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
+            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
 
-                pos_out = self.edge_injection_forward(pos_g).cpu()
-                neg_out = self.edge_injection_forward(neg_g).cpu()
-                pos_valid_pred.append(pos_out)
-                neg_valid_pred.append(neg_out)
-            pos_valid_pred = torch.cat(pos_valid_pred, dim=0)
-            neg_valid_pred = torch.cat(neg_valid_pred, dim=0)
-            
-            pos_test_pred = []
-            neg_test_pred = []
-
-            for perm in DataLoader(range(len(pos_test_edge)), batch_size):
-                batch_pos_graphs_minus = [pos_test_edge[i] for i in perm]
-                batch_neg_graphs_plus = [neg_test_edge[i] for i in perm]
-
-                pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-                neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
-
-                pos_out = self.edge_injection_forward(pos_g).cpu()
-                neg_out = self.edge_injection_forward(neg_g).cpu()
-                pos_test_pred.append(pos_out)
-                neg_test_pred.append(neg_out)
-            pos_test_pred = torch.cat(pos_test_pred, dim=0)
-            neg_test_pred = torch.cat(neg_test_pred, dim=0)
-        else:
-            pos_valid_edge, neg_valid_edge = pos_valid_edge.to(self.device), neg_valid_edge.to(self.device)
-            pos_test_edge, neg_test_edge = pos_test_edge.to(self.device), neg_test_edge.to(self.device)
-            input_feat = self.create_input_feat(data)
-            h = self.encoder(input_feat, data.adj_t.to(self.device))
-            # The default index of unseen nodes is -1,
-            # hidden representations of unseen nodes is the average of all seen node representations
-            mean_h = torch.mean(h, dim=0, keepdim=True)
-            h = torch.cat([h, mean_h], dim=0)
-
-
-            pos_valid_pred = self.batch_predict(h, pos_valid_edge, batch_size)
-            neg_valid_pred = self.batch_predict(h, neg_valid_edge, batch_size)
-
-            pos_test_pred = self.batch_predict(h, pos_test_edge, batch_size)
-            neg_test_pred = self.batch_predict(h, neg_test_edge, batch_size)
+            pos_out = self.batch_forward(pos_g).cpu()
+            neg_out = self.batch_forward(neg_g).cpu()
+            pos_test_pred.append(pos_out)
+            neg_test_pred.append(neg_out)
+        pos_test_pred = torch.cat(pos_test_pred, dim=0)
+        neg_test_pred = torch.cat(neg_test_pred, dim=0)
 
 
         if eval_metric == 'hits':
@@ -347,6 +285,7 @@ class BaseModel(object):
         model.emb.load_state_dict(state["emb"])
         model.encoder.load_state_dict(state["model"])
         model.predictor.load_state_dict(state["predictor"])
+        model.semantic_att.load_state_dict(state["semantic_att"])
 
         return model
 
@@ -355,11 +294,12 @@ class BaseModel(object):
             "args":self.meta,
             "emb":self.emb.state_dict(),
             "model":self.encoder.state_dict(),
-            "predictor":self.predictor.state_dict()
+            "predictor":self.predictor.state_dict(),
+            "semantic_att":self.semantic_att.state_dict(),
         }
         torch.save(state, model_path)
 
-    def edge_injection_forward(self, graph: Data):
+    def batch_forward(self, graph: Data):
         x = self.create_input_feat(graph)
         encoded = self.encoder.edge_injection_forward(x, graph) # batch_size x src_dst x plus_minus x feat_dim
         encoded = encoded.reshape(-1,2,self.semantic_att.in_size) # (batch_size x src_dst) x plus_minus x feat_dim

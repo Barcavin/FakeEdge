@@ -51,7 +51,6 @@ def argument():
     parser.add_argument('--eval_last_best', type=str2bool, default=False)
     parser.add_argument('--load_model', type=str2bool, default=False)
     parser.add_argument('--save_model', type=str2bool, default=False)
-    parser.add_argument('--edge_perturbation', type=str2bool, default=False)
 
     args = parser.parse_args()
     return args
@@ -135,7 +134,6 @@ def main():
                 use_node_feats=args.use_node_feats,
                 train_node_emb=args.train_node_emb,
                 pretrain_emb=args.pretrain_emb,
-                edge_perturbation=args.edge_perturbation,
                 drnl=args.drnl,
                 weight_decay=args.weight_decay,
             )
@@ -166,11 +164,10 @@ def main():
                 cur_lr = scheduler.get_last_lr()[0]
             else:
                 cur_lr = args.lr
-            loss = model.train(data, args.batch_size, args.num_neg, train_list)
+            loss = model.train(args.batch_size, args.num_neg, train_list)
 
             if epoch % args.eval_steps == 0:
-                results = model.test(data,
-                                     batch_size=args.batch_size,
+                results = model.test(batch_size=args.batch_size,
                                      evaluator=evaluator,
                                      eval_metric=args.eval_metric,
                                      val_list=val_list,
