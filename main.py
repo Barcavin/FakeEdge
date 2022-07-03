@@ -38,6 +38,7 @@ def argument():
     parser.add_argument('--weight_decay', type=float, default=2e-4)
     parser.add_argument('--num_neg', type=int, default=3)
     parser.add_argument('--neg_sampler', type=str, default='global')
+    parser.add_argument('--train_percent', type=float, default=100)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--eval_steps', type=int, default=5)
     parser.add_argument('--runs', type=int, default=1)

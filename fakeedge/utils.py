@@ -289,6 +289,14 @@ def data_process(args):
             split_edge['train']['weight'] = deg_inv_sqrt[full_edge_index[0]] * full_edge_weight * deg_inv_sqrt[
                 full_edge_index[1]]
 
+    if args.train_percent<100:
+        original_training_num = split_edge["train"]["edge"].shape[0]
+        num_train = int(args.train_percent*original_training_num/100)
+        perm = torch.randperm(split_edge["train"]["edge"].shape[0])
+        keep_perm = perm[:num_train]
+        split_edge["train"]["edge"] = split_edge["train"]["edge"][keep_perm]
+        print("Keep {}-->{} edges for training".format(original_training_num, num_train))
+
     if args.encoder.upper() == 'GCN':
         # Pre-compute GCN normalization.
         data.adj_t = gcn_normalization(data.adj_t)
