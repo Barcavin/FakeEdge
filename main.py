@@ -37,6 +37,7 @@ def argument():
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=2e-4)
     parser.add_argument('--num_hops', type=int, default=2)
+    parser.add_argument('--max_nodes_per_hop', type=int, default=None)
     parser.add_argument('--num_neg', type=int, default=3)
     parser.add_argument('--neg_sampler', type=str, default='global')
     parser.add_argument('--train_percent', type=float, default=100)
@@ -150,13 +151,13 @@ def main():
             scheduler = None
         train_list = process_graph("train",data,split_edge, 
                                 args.num_hops, args.drnl,
-                               neg_sampler_name=args.neg_sampler,num_neg=args.num_neg, 
+                               neg_sampler_name=args.neg_sampler,num_neg=args.num_neg,max_nodes_per_hop=args.max_nodes_per_hop, 
                                save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         val_list = process_graph("valid",data, split_edge, 
-                                args.num_hops, args.drnl, 
+                                args.num_hops, args.drnl, max_nodes_per_hop=args.max_nodes_per_hop, 
                                save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         test_list = process_graph("test",data, split_edge, 
-                                args.num_hops, args.drnl, 
+                                args.num_hops, args.drnl, max_nodes_per_hop=args.max_nodes_per_hop, 
                                save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         start_time = time.time()
 
