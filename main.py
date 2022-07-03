@@ -36,6 +36,7 @@ def argument():
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=2e-4)
+    parser.add_argument('--num_hops', type=int, default=2)
     parser.add_argument('--num_neg', type=int, default=3)
     parser.add_argument('--neg_sampler', type=str, default='global')
     parser.add_argument('--train_percent', type=float, default=100)
@@ -51,8 +52,6 @@ def argument():
     parser.add_argument('--drnl', type=str2bool, default=True)
     parser.add_argument('--use_valedges_as_input', type=str2bool, default=False)
     parser.add_argument('--eval_last_best', type=str2bool, default=False)
-    parser.add_argument('--load_model', type=str2bool, default=False)
-    parser.add_argument('--save_model', type=str2bool, default=False)
 
     args = parser.parse_args()
     return args
@@ -112,33 +111,30 @@ def main():
         }
 
 
-    for run in range(args.runs*(not args.load_model)): # If model_load, no training
+    for run in range(args.runs): # If model_load, no training
         data, split_edge, num_nodes, num_node_feats = data_process(args)
-        if args.load_model:
-            model = BaseModel.load(model_path,device=device)
-        else:
-            model = BaseModel(
-                lr=args.lr,
-                dropout=args.dropout,
-                grad_clip_norm=args.grad_clip_norm,
-                gnn_num_layers=args.gnn_num_layers,
-                mlp_num_layers=args.mlp_num_layers,
-                emb_hidden_channels=args.emb_hidden_channels,
-                gnn_hidden_channels=args.gnn_hidden_channels,
-                mlp_hidden_channels=args.mlp_hidden_channels,
-                num_nodes=num_nodes,
-                num_node_feats=num_node_feats,
-                gnn_encoder_name=args.encoder,
-                predictor_name=args.predictor,
-                loss_func=args.loss_func,
-                optimizer_name=args.optimizer,
-                device=device,
-                use_node_feats=args.use_node_feats,
-                train_node_emb=args.train_node_emb,
-                pretrain_emb=args.pretrain_emb,
-                drnl=args.drnl,
-                weight_decay=args.weight_decay,
-            )
+        model = BaseModel(
+            lr=args.lr,
+            dropout=args.dropout,
+            grad_clip_norm=args.grad_clip_norm,
+            gnn_num_layers=args.gnn_num_layers,
+            mlp_num_layers=args.mlp_num_layers,
+            emb_hidden_channels=args.emb_hidden_channels,
+            gnn_hidden_channels=args.gnn_hidden_channels,
+            mlp_hidden_channels=args.mlp_hidden_channels,
+            num_nodes=num_nodes,
+            num_node_feats=num_node_feats,
+            gnn_encoder_name=args.encoder,
+            predictor_name=args.predictor,
+            loss_func=args.loss_func,
+            optimizer_name=args.optimizer,
+            device=device,
+            use_node_feats=args.use_node_feats,
+            train_node_emb=args.train_node_emb,
+            pretrain_emb=args.pretrain_emb,
+            drnl=args.drnl,
+            weight_decay=args.weight_decay,
+        )
         model.param_init()
 
         if run == 0:
@@ -153,14 +149,14 @@ def main():
         else:
             scheduler = None
         train_list = process_graph("train",data,split_edge, 
-                                model.encoder.num_layers, args.drnl,
+                                args.num_hops, args.drnl,
                                neg_sampler_name=args.neg_sampler,num_neg=args.num_neg, 
                                save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         val_list = process_graph("valid",data, split_edge, 
-                                model.encoder.num_layers, args.drnl, 
+                                args.num_hops, args.drnl, 
                                save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         test_list = process_graph("test",data, split_edge, 
-                                model.encoder.num_layers, args.drnl, 
+                                args.num_hops, args.drnl, 
                                save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
         start_time = time.time()
 
@@ -219,8 +215,6 @@ def main():
             with open(log_file, 'a') as f:
                 print(key, file=f)
                 loggers[key].print_statistics(run, f=f, last_best=args.eval_last_best)
-        if args.save_model:
-            model.save(model_path)
 
     for key in loggers.keys():
         print(key)
