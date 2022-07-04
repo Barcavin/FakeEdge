@@ -211,34 +211,33 @@ class BaseModel(object):
 
         pos_valid_pred = []
         neg_valid_pred = []
-
         for perm in DataLoader(range(len(pos_valid_edge)), batch_size):
             batch_pos_graphs_minus = [pos_valid_edge[i] for i in perm]
-            batch_neg_graphs_plus = [neg_valid_edge[i] for i in perm]
-
             pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
-
             pos_out = self.batch_forward(pos_g).cpu()
-            neg_out = self.batch_forward(neg_g).cpu()
             pos_valid_pred.append(pos_out)
+
+        for perm in DataLoader(range(len(neg_valid_edge)), batch_size):
+            batch_neg_graphs_plus = [neg_valid_edge[i] for i in perm]
+            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
+            neg_out = self.batch_forward(neg_g).cpu()
             neg_valid_pred.append(neg_out)
+
         pos_valid_pred = torch.cat(pos_valid_pred, dim=0)
         neg_valid_pred = torch.cat(neg_valid_pred, dim=0)
         
         pos_test_pred = []
         neg_test_pred = []
-
         for perm in DataLoader(range(len(pos_test_edge)), batch_size):
             batch_pos_graphs_minus = [pos_test_edge[i] for i in perm]
-            batch_neg_graphs_plus = [neg_test_edge[i] for i in perm]
-
             pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
-
             pos_out = self.batch_forward(pos_g).cpu()
-            neg_out = self.batch_forward(neg_g).cpu()
             pos_test_pred.append(pos_out)
+        
+        for perm in DataLoader(range(len(neg_test_edge)), batch_size):
+            batch_neg_graphs_plus = [neg_test_edge[i] for i in perm]
+            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
+            neg_out = self.batch_forward(neg_g).cpu()
             neg_test_pred.append(neg_out)
         pos_test_pred = torch.cat(pos_test_pred, dim=0)
         neg_test_pred = torch.cat(neg_test_pred, dim=0)

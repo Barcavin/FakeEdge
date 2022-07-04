@@ -290,12 +290,13 @@ def data_process(args):
                 full_edge_index[1]]
 
     if args.train_percent<100:
-        original_training_num = split_edge["train"]["edge"].shape[0]
-        num_train = int(args.train_percent*original_training_num/100)
-        perm = torch.randperm(split_edge["train"]["edge"].shape[0])
-        keep_perm = perm[:num_train]
-        split_edge["train"]["edge"] = split_edge["train"]["edge"][keep_perm]
-        print("Keep {}-->{} edges for training".format(original_training_num, num_train))
+        split_edge["train"] = sample_edges("train",split_edge, args.train_percent)
+    
+    if args.val_percent<100:
+        split_edge["valid"] = sample_edges("valid",split_edge, args.val_percent)
+    
+    if args.test_percent<100:
+        split_edge["test"] = sample_edges("test",split_edge, args.test_percent)
 
     if args.encoder.upper() == 'GCN':
         # Pre-compute GCN normalization.
@@ -303,6 +304,18 @@ def data_process(args):
 
     return data, split_edge, num_nodes, num_node_feats
 
+def sample_edges(split, split_edge, ratio):
+    """
+        inplace modify `split_edge`
+    """
+    ratio = ratio/100
+    edges = split_edge[split]
+    for edge_type in edges:
+        num = edges[edge_type].shape[0]
+        perm = torch.randperm(num)
+        edges[edge_type] = edges[edge_type][perm[:int(num * ratio)]]
+        print(f"Sample {num} --> {int(num * ratio)} {edge_type} edges for {split}")
+    return edges
 
 # =========== Code adpated from WalkPooling =============
 
