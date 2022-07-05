@@ -298,7 +298,7 @@ class BaseModel(object):
 
     def batch_forward(self, graph: Data):
         x = self.create_input_feat(graph)
-        encoded = self.encoder.edge_injection_forward(x, graph) # batch_size x src_dst x plus_minus x feat_dim
+        encoded = self.encoder.fake_edge_forward(x, graph) # batch_size x src_dst x plus_minus x feat_dim
         encoded = encoded.reshape(-1,2,self.semantic_att.in_size) # (batch_size x src_dst) x plus_minus x feat_dim
         out = self.semantic_att(encoded).reshape(-1,2,self.semantic_att.in_size) # batch_size x src_dst x feat_dim
         out = self.predictor(out[:,0,:], out[:,1,:]).squeeze()

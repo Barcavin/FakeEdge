@@ -9,7 +9,8 @@ from ogb.linkproppred import Evaluator
 import wandb
 from fakeedge.logger import Logger
 from fakeedge.model import BaseModel
-from fakeedge.utils import data_process, process_graph
+from fakeedge.utils import data_process
+from fakeedge.dataset import get_dataset
 
 
 def argument():
@@ -25,7 +26,7 @@ def argument():
     parser.add_argument('--eval_metric', type=str, default='hits')
     parser.add_argument('--res_dir', type=str, default='log')
     parser.add_argument('--pretrain_emb', type=str, default='')
-    parser.add_argument('--save_or_load_processed', type=str, default='')
+    parser.add_argument('--dynamic', type=str2bool, default=False)
     parser.add_argument('--gnn_num_layers', type=int, default=2)
     parser.add_argument('--mlp_num_layers', type=int, default=2)
     parser.add_argument('--emb_hidden_channels', type=int, default=128)
@@ -151,16 +152,14 @@ def main():
             scheduler = torch.optim.lr_scheduler.ExponentialLR(model.optimizer, gamma=args.scheduler_gamma)
         else:
             scheduler = None
-        train_list = process_graph("train",data,split_edge, 
-                                args.num_hops, args.drnl,
-                               neg_sampler_name=args.neg_sampler,num_neg=args.num_neg,max_nodes_per_hop=args.max_nodes_per_hop, 
-                               save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
-        val_list = process_graph("valid",data, split_edge, 
-                                args.num_hops, args.drnl, max_nodes_per_hop=args.max_nodes_per_hop, 
-                               save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
-        test_list = process_graph("test",data, split_edge, 
-                                args.num_hops, args.drnl, max_nodes_per_hop=args.max_nodes_per_hop, 
-                               save_or_load_processed= args.save_or_load_processed,save_name= args.data_name)
+        train_list = get_dataset("train",data,split_edge, 
+                                args.num_hops,
+                               neg_sampler_name=args.neg_sampler,num_neg=args.num_neg,max_nodes_per_hop=args.max_nodes_per_hop,
+                               dynamic=args.dynamic,data_name_append=args.data_name)
+        val_list = get_dataset("valid",data, split_edge, 
+                                args.num_hops,  max_nodes_per_hop=args.max_nodes_per_hop,dynamic=args.dynamic,data_name_append=args.data_name)
+        test_list = get_dataset("test",data, split_edge, 
+                                args.num_hops,  max_nodes_per_hop=args.max_nodes_per_hop,dynamic=args.dynamic,data_name_append=args.data_name)
         start_time = time.time()
 
         for epoch in range(1, 1 + args.epochs):

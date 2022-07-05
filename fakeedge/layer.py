@@ -32,7 +32,7 @@ class BaseGNN(torch.nn.Module):
             x = F.dropout(x, p=self.dropout, training=self.training)
         return x
     
-    def edge_injection_forward(self, x, graph: Data):
+    def fake_edge_forward(self, x, graph: Data):
         w_edge = self.forward(x, graph.edge_index)[graph.mapping,:] # N x 2 x feat_dim
         wo_edge = self.forward(x, graph.edge_index[:,graph.edge_mask])[graph.mapping,:] # N x 2 x feat_dim
         rst = torch.stack([w_edge, wo_edge],dim=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
