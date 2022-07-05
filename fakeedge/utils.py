@@ -11,7 +11,7 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from scipy.sparse.csgraph import shortest_path
 from sklearn import metrics
 from torch_geometric.data import Data
-from torch_geometric.datasets import Planetoid
+from torch_geometric.datasets import Planetoid, FakeDataset
 from torch_geometric.utils import (from_scipy_sparse_matrix, is_undirected,
                                    to_undirected)
 from torch_sparse import SparseTensor, coalesce
@@ -169,7 +169,7 @@ def data_process(args):
         dataset = PygLinkPropPredDataset(name=args.data_name, root=root_dir)
         data = dataset[0]
         split_edge = dataset.get_edge_split()
-    else:
+    else: # will do a data split and return split_edge
         if args.data_name in ["cora",\
                             "citeseer",\
                             "pubmed",]:\
@@ -188,6 +188,8 @@ def data_process(args):
                                 "USAir",
                                 "Yeast"]:
             data = load_unsplitted_data(args)
+        elif args.data_name == 'random': # Too good to be true. Generate a random graph here
+            data = FakeDataset(avg_num_nodes=3000)[0]
         else:
             raise NotImplementedError(f"Can't read data {args.data_name}")
         num_nodes = torch.max(data.edge_index)+1
