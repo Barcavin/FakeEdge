@@ -11,7 +11,7 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from scipy.sparse.csgraph import shortest_path
 from sklearn import metrics
 from torch_geometric.data import Data
-from torch_geometric.datasets import Planetoid
+from torch_geometric.datasets import Planetoid, FakeDataset
 from torch_geometric.utils import (from_scipy_sparse_matrix, is_undirected,
                                    to_undirected)
 from torch_sparse import SparseTensor, coalesce
@@ -169,7 +169,7 @@ def data_process(args):
         dataset = PygLinkPropPredDataset(name=args.data_name, root=root_dir)
         data = dataset[0]
         split_edge = dataset.get_edge_split()
-    else:
+    else: # will do a data split and return split_edge
         if args.data_name in ["cora",\
                             "citeseer",\
                             "pubmed",]:\
@@ -188,6 +188,8 @@ def data_process(args):
                                 "USAir",
                                 "Yeast"]:
             data = load_unsplitted_data(args)
+        elif args.data_name == 'random': # Too good to be true. Generate a random graph here
+            data = FakeDataset(avg_num_nodes=3000)[0]
         else:
             raise NotImplementedError(f"Can't read data {args.data_name}")
         num_nodes = torch.max(data.edge_index)+1
@@ -546,7 +548,7 @@ def concat_graphs(graphs: List[Data]):
     return rst
 
 
-def edge_injection(num_layers, data, node_pairs, plus: bool, drnl:bool, max_nodes_per_hop:int = None):
+def fake_edge(num_hops, data, node_pairs, plus: bool, drnl:bool, max_nodes_per_hop:int = None):
     """
         edge_index : (2,num_edges)
         node_pairs : (num_pairs,2)
@@ -558,40 +560,14 @@ def edge_injection(num_layers, data, node_pairs, plus: bool, drnl:bool, max_node
         f = minus_edge
     tqdm_iterate = tqdm(node_pairs)
     for pair in tqdm_iterate:
-        one_graph = f(data, pair, num_layers, drnl, max_nodes_per_hop) 
+        one_graph = f(data, pair, num_hops, drnl, max_nodes_per_hop) 
         graphs.append(one_graph)
     return graphs
 
-def process_graph(split, data, split_edge, num_hops, drnl, neg_sampler_name=None,num_neg=None,max_nodes_per_hop=None,
-                save_or_load_processed='',save_name=None):
-    
-    if save_or_load_processed == 'load':
-        file_path = root_dir/save_name/f"{split}_graphs.pt"
-        dump = torch.load(file_path)
-        pos_graphs_minus, neg_graphs_plus = dump['pos'], dump['neg']
+def process_graph(split, data, edges, positive:bool, num_hops, drnl:bool, max_nodes_per_hop=None):
+    if (split == 'train') and (positive):
+        plus = False # only remove edges when it's training set and positive edges
     else:
-        pos_edge, neg_edge = get_pos_neg_edges(split, split_edge,
-                                                edge_index=data.edge_index,
-                                                num_nodes=data.num_nodes,
-                                                neg_sampler_name=neg_sampler_name,
-                                                num_neg=num_neg)
-        if split == 'train':
-            # remove edge on training's pos edge
-            pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=False,drnl=drnl,max_nodes_per_hop=max_nodes_per_hop) # len == pos_trian_edge.shape[0]
-            # add edge on training's neg edge
-            neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl,max_nodes_per_hop=max_nodes_per_hop) # len == neg_train_edge.shape[0] * num_neg
-        else:
-            # radd edge on val/test's pos edge
-            pos_graphs_minus = edge_injection(num_hops, data,pos_edge,plus=True,drnl=drnl,max_nodes_per_hop=max_nodes_per_hop) # len == pos_trian_edge.shape[0]
-            # radd edge on val/test's neg edge
-            neg_graphs_plus = edge_injection(num_hops, data,neg_edge.reshape(-1,2),plus=True,drnl=drnl,max_nodes_per_hop=max_nodes_per_hop) # len == neg_train_edge.shape[0] * num_neg
-        if save_or_load_processed == 'save':
-            assert save_name is not None
-            dump = {
-                "pos": pos_graphs_minus,
-                "neg": neg_graphs_plus
-            }
-            dir_path = root_dir/save_name
-            dir_path.mkdir(exist_ok=True)
-            torch.save(dump, dir_path / f"{split}_graphs.pt")
-    return (pos_graphs_minus, neg_graphs_plus)
+        plus = True # for negative edges, or val/test set, always plus edges
+    processed = fake_edge(num_hops, data, edges, plus, drnl, max_nodes_per_hop)
+    return processed
