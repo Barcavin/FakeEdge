@@ -45,7 +45,7 @@ class BaseModel(object):
     def __init__(self, lr, dropout, grad_clip_norm, gnn_num_layers, mlp_num_layers, emb_hidden_channels,
                  gnn_hidden_channels, mlp_hidden_channels, num_nodes, num_node_feats, gnn_encoder_name,
                  predictor_name, loss_func, optimizer_name, device, use_node_feats, train_node_emb,
-                 pretrain_emb=None, drnl=False, weight_decay=0):
+                 pretrain_emb=None, drnl=False, weight_decay=0, fusion_type='att'):
         # track args
         self.meta = locals().copy()
         self.meta.pop("self")
@@ -62,7 +62,8 @@ class BaseModel(object):
         self.device = device
         self.weight_decay = weight_decay
         self.drnl = drnl
-
+        self.fusion_type = fusion_type
+        assert fusion_type in ['att','plus','minus','mean']
         # Input Layer
         self.input_channels, self.emb, self.drnl_emb = create_input_layer(num_nodes=num_nodes,
                                                            num_node_feats=num_node_feats,
@@ -300,7 +301,14 @@ class BaseModel(object):
         x = self.create_input_feat(graph)
         encoded = self.encoder.fake_edge_forward(x, graph) # batch_size x src_dst x plus_minus x feat_dim
         encoded = encoded.reshape(-1,2,self.semantic_att.in_size) # (batch_size x src_dst) x plus_minus x feat_dim
-        out = self.semantic_att(encoded).reshape(-1,2,self.semantic_att.in_size) # batch_size x src_dst x feat_dim
+        if self.fusion_type=='att': #['att','plus','minus','mean']
+            out = self.semantic_att(encoded).reshape(-1,2,self.semantic_att.in_size) # batch_size x src_dst x feat_dim
+        elif self.fusion_type=='plus':
+            out = encoded[:,0,:].reshape(-1,2,self.semantic_att.in_size)
+        elif self.fusion_type=='minus':
+            out = encoded[:,1,:].reshape(-1,2,self.semantic_att.in_size)
+        elif self.fusion_type=='mean':
+            out = encoded.mean(axis=1).reshape(-1,2,self.semantic_att.in_size)
         out = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
         return out
     

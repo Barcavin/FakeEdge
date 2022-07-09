@@ -41,6 +41,7 @@ def argument():
     parser.add_argument('--max_nodes_per_hop', type=int, default=None)
     parser.add_argument('--num_neg', type=int, default=3)
     parser.add_argument('--neg_sampler', type=str, default='global')
+    parser.add_argument('--fusion', type=str, default='att')
     parser.add_argument('--train_percent', type=float, default=100)
     parser.add_argument('--val_percent', type=float, default=100)
     parser.add_argument('--test_percent', type=float, default=100)
@@ -138,6 +139,7 @@ def main():
             pretrain_emb=args.pretrain_emb,
             drnl=args.drnl,
             weight_decay=args.weight_decay,
+            fusion_type=args.fusion,
         )
         model.param_init()
 
