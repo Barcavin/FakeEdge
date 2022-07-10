@@ -204,7 +204,12 @@ class SemanticAttention(nn.Module):
         super(SemanticAttention, self).__init__()
         self.in_size = in_size
         self.hidden_size = hidden_size
-        self.project = nn.Sequential(
+        self.project_pos = nn.Sequential(
+            nn.Linear(in_size, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, 1, bias=False)
+        )
+        self.project_neg = nn.Sequential(
             nn.Linear(in_size, hidden_size),
             nn.Tanh(),
             nn.Linear(hidden_size, 1, bias=False)
@@ -212,17 +217,22 @@ class SemanticAttention(nn.Module):
 
     def forward(self, z):
         """
-            N x M x dim
+            N x 2 x dim
         """
-        w = self.project(z)  # (N, M, 1)
-        beta = torch.softmax(w, dim=1)  # (N, M, 1)
+        w_pos = self.project_pos(z[:,0,:])  # (N, 1)
+        w_neg = self.project_neg(z[:,1,:])  # (N, 1)
+        w = torch.cat([w_pos, w_neg], dim=1)  # (N, 2)
+        beta = torch.softmax(w, dim=1).unsqueeze(2)  # (N, 2, 1(unsqueeze))
         # beta = beta.expand((z.shape[0],) + beta.shape)  # (N, M, 1)
-        out = (beta * z).sum(1)  # (N, M)
+        out = (beta * z).sum(1)  # (N, dim)
 
         return out
     
     def reset_parameters(self):
-        for lin in self.project:
+        for lin in self.project_pos:
+            if isinstance(lin, nn.Linear):
+                lin.reset_parameters()
+        for lin in self.project_neg:
             if isinstance(lin, nn.Linear):
                 lin.reset_parameters()
         return self
