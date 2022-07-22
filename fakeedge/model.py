@@ -63,7 +63,7 @@ class BaseModel(object):
         self.weight_decay = weight_decay
         self.drnl = drnl
         self.fusion_type = fusion_type
-        assert fusion_type in ['att','plus','minus','mean']
+        assert fusion_type in ['att','plus','minus','mean', 'original']
         # Input Layer
         self.input_channels, self.emb, self.drnl_emb = create_input_layer(num_nodes=num_nodes,
                                                            num_node_feats=num_node_feats,
@@ -299,7 +299,7 @@ class BaseModel(object):
 
     def batch_forward(self, graph: Data):
         x = self.create_input_feat(graph)
-        encoded = self.encoder.fake_edge_forward(x, graph) # batch_size x src_dst x plus_minus x feat_dim
+        encoded, encoded_ori = self.encoder.fake_edge_forward(x, graph) # batch_size x src_dst x plus_minus x feat_dim
         encoded = encoded.reshape(-1,2,self.semantic_att.in_size) # (batch_size x src_dst) x plus_minus x feat_dim
         if self.fusion_type=='att': #['att','plus','minus','mean']
             out = self.semantic_att(encoded).reshape(-1,2,self.semantic_att.in_size) # batch_size x src_dst x feat_dim
@@ -309,6 +309,10 @@ class BaseModel(object):
             out = encoded[:,1,:].reshape(-1,2,self.semantic_att.in_size)
         elif self.fusion_type=='mean':
             out = encoded.mean(axis=1).reshape(-1,2,self.semantic_att.in_size)
+        elif self.fusion_type=="original":
+            out = encoded_ori.reshape(-1,2,self.semantic_att.in_size)
+        else:
+            raise ValueError("fusion_type must be one of ['att','plus','minus','mean','original']")
         out = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
         return out
     

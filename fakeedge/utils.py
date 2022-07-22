@@ -418,6 +418,7 @@ def plus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=Non
     edge_mask = torch.ones(edge_index_p.size(1),dtype=torch.bool)
     edge_mask[-1] = False
     edge_mask[-2] = False
+    edge_mask_original = edge_mask.clone()
 
     if drnl:
         num_nodes = nodes.shape[0]
@@ -426,6 +427,7 @@ def plus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=Non
         z = 0
     data = Data(edge_index = edge_index_p, x = x_sub, 
                 edge_mask = edge_mask,
+                edge_mask_original = edge_mask_original,
                 n_id = nodes,
                 mapping = mapping,
                 z = z,
@@ -449,6 +451,7 @@ def minus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=No
 
     #edge_mask marks the edge under perturbation, i.e., the candidate edge for LP
     edge_mask = torch.ones(edge_index_p.size(1), dtype = torch.bool)
+    edge_mask_original = torch.ones(edge_index_p.size(1), dtype = torch.bool)
     ind = torch.where((edge_index_p == mapping.view(-1,1)).all(dim=0))
     assert ind[0].numel() > 0, "Not Found the adding edge in the graph"
     edge_mask[ind[0]] = False
@@ -463,6 +466,7 @@ def minus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=No
         z = 0
     data = Data(edge_index = edge_index_p, x = x_sub, 
                 edge_mask = edge_mask,
+                edge_mask_original = edge_mask_original,
                 n_id = nodes,
                 mapping = mapping,
                 z = z,
@@ -517,6 +521,7 @@ def concat_graphs(graphs: List[Data]):
     x = []
     edge_index = []
     edge_mask = []
+    edge_mask_original = []
     n_id = []
     mapping = []
     z = []
@@ -525,6 +530,7 @@ def concat_graphs(graphs: List[Data]):
         x.append(g.x)
         edge_index.append(g.edge_index+start)
         edge_mask.append(g.edge_mask)
+        edge_mask_original.append(g.edge_mask_original)
         n_id.append(g.n_id)
         mapping.append(g.mapping+start)
         start += g.num_nodes
@@ -536,6 +542,7 @@ def concat_graphs(graphs: List[Data]):
         concat_x = torch.concat(x,axis=0)
     concat_edge_index = torch.concat(edge_index,axis=1)
     concat_edge_mask = torch.concat(edge_mask)
+    concat_edge_mask_original = torch.concat(edge_mask_original)
     concat_n_id = torch.concat(n_id)
     concat_mapping = torch.stack(mapping) # num_graphs x 2
     if isinstance(graphs[-1].z,int):
@@ -543,7 +550,7 @@ def concat_graphs(graphs: List[Data]):
     else:
         concat_z = torch.concat(z)
 
-    rst = Data(x=concat_x, edge_index=concat_edge_index, edge_mask= concat_edge_mask,
+    rst = Data(x=concat_x, edge_index=concat_edge_index, edge_mask= concat_edge_mask, edge_mask_original=concat_edge_mask_original,
                 n_id= concat_n_id, mapping= concat_mapping, num_nodes=concat_n_id.shape[0], z=concat_z)
     return rst
 
