@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from argparse import Namespace
 from pathlib import Path
+import random
 from typing import List
 
 import numpy as np
@@ -21,6 +22,13 @@ from fakeedge.negative_sample import (global_neg_sample, global_perm_neg_sample,
                                    local_neg_sample)
 root_dir= Path.home()/'files'
 
+def set_random_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.determinstic = True
 
 def get_pos_neg_edges(split, split_edge, edge_index=None, num_nodes=None, neg_sampler_name=None, num_neg=None):
     if 'edge' in split_edge['train']:

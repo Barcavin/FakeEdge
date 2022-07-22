@@ -9,7 +9,7 @@ from ogb.linkproppred import Evaluator
 import wandb
 from fakeedge.logger import Logger
 from fakeedge.model import BaseModel
-from fakeedge.utils import data_process
+from fakeedge.utils import data_process, set_random_seed
 from fakeedge.dataset import get_dataset
 
 
@@ -77,6 +77,7 @@ def main():
     print(args)
     wandb.init(project="FakeEdge", entity='kevindong',group=args.data_name)
     wandb.config.update(args)
+    set_random_seed(42)
 
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
