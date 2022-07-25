@@ -32,10 +32,6 @@ class BaseGNN(torch.nn.Module):
             x = F.dropout(x, p=self.dropout, training=self.training)
         return x
     
-    def fake_edge_forward(self, x, edge_index, mapping):
-        out = self.forward(x, edge_index)[mapping,:] # N x 2 x feat_dim
-        return out
-
 
 
 class SAGE(BaseGNN):
