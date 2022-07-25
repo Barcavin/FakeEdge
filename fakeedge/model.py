@@ -299,18 +299,22 @@ class BaseModel(object):
 
     def batch_forward(self, graph: Data):
         x = self.create_input_feat(graph)
-        encoded, encoded_ori = self.encoder.fake_edge_forward(x, graph) # batch_size x src_dst x plus_minus x feat_dim
-        encoded = encoded.reshape(-1,2,self.semantic_att.in_size) # (batch_size x src_dst) x plus_minus x feat_dim
         if self.fusion_type=='att': #['att','plus','minus','mean']
+            plus = self.encoder.fake_edge_forward(x, graph.edge_index, graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
+            minus = self.encoder.fake_edge_forward(x, graph.edge_index[:,graph.edge_mask], graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
+            encoded = torch.stack([plus, minus],dim=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
+            encoded = encoded.reshape(-1,2,self.semantic_att.in_size) # (batch_size x src_dst) x plus_minus x feat_dim
             out = self.semantic_att(encoded).reshape(-1,2,self.semantic_att.in_size) # batch_size x src_dst x feat_dim
         elif self.fusion_type=='plus':
-            out = encoded[:,0,:].reshape(-1,2,self.semantic_att.in_size)
+            out = self.encoder.fake_edge_forward(x, graph.edge_index, graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
         elif self.fusion_type=='minus':
-            out = encoded[:,1,:].reshape(-1,2,self.semantic_att.in_size)
+            out = self.encoder.fake_edge_forward(x, graph.edge_index[:,graph.edge_mask], graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
         elif self.fusion_type=='mean':
-            out = encoded.mean(axis=1).reshape(-1,2,self.semantic_att.in_size)
+            minus = self.encoder.fake_edge_forward(x, graph.edge_index[:,graph.edge_mask], graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
+            plus = self.encoder.fake_edge_forward(x, graph.edge_index, graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
+            out = torch.stack([plus, minus],dim=2).mean(axis=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
         elif self.fusion_type=="original":
-            out = encoded_ori.reshape(-1,2,self.semantic_att.in_size)
+            out = self.encoder.fake_edge_forward(x, graph.edge_index[:,graph.edge_mask_original], graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
         else:
             raise ValueError("fusion_type must be one of ['att','plus','minus','mean','original']")
         out = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
@@ -333,6 +337,7 @@ def create_input_layer(num_nodes, num_node_feats, hidden_channels, use_node_feat
         emb = torch.nn.Embedding(num_nodes, hidden_channels)
         input_dim += hidden_channels
     elif pretrain_emb is not None and pretrain_emb != '':
+        
         weight = torch.load(pretrain_emb)
         emb = torch.nn.Embedding.from_pretrained(weight)
         input_dim += emb.weight.size(1)

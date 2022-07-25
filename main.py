@@ -45,7 +45,7 @@ def argument():
     parser.add_argument('--train_percent', type=float, default=100)
     parser.add_argument('--val_percent', type=float, default=100)
     parser.add_argument('--test_percent', type=float, default=100)
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--eval_steps', type=int, default=5)
     parser.add_argument('--runs', type=int, default=1)
     parser.add_argument('--year', type=int, default=-1)
@@ -116,7 +116,14 @@ def main():
             'aucpr': Logger(args.runs, args),
         }
 
+    if args.data_name in ('Ecoli','PB','pubmed'):
+        args.max_nodes_per_hop=100
 
+    if args.data_name=='Power':
+        args.num_hops=3
+
+    if args.data_name=='Yeast':
+        args.max_nodes_per_hop=100
     for run in range(args.runs): # If model_load, no training
         data, split_edge, num_nodes, num_node_feats = data_process(args)
         model = BaseModel(
