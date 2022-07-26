@@ -311,7 +311,7 @@ class BaseModel(object):
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
         elif self.fusion_type=='mean':
             minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            plus = self.encoder(x, graph.edge_index, graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
+            plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
             out = torch.stack([plus, minus],dim=2).mean(axis=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
         elif self.fusion_type=="original":
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask_original])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
