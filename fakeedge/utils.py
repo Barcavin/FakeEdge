@@ -533,6 +533,7 @@ def concat_graphs(graphs: List[Data]):
     n_id = []
     mapping = []
     z = []
+    batch = []
     start=0
     for g in graphs:
         x.append(g.x)
@@ -541,6 +542,7 @@ def concat_graphs(graphs: List[Data]):
         edge_mask_original.append(g.edge_mask_original)
         n_id.append(g.n_id)
         mapping.append(g.mapping+start)
+        batch.append(g.num_nodes)
         start += g.num_nodes
         z.append(g.z)
     
@@ -552,6 +554,7 @@ def concat_graphs(graphs: List[Data]):
     concat_edge_mask = torch.concat(edge_mask)
     concat_edge_mask_original = torch.concat(edge_mask_original)
     concat_n_id = torch.concat(n_id)
+    concat_batch = torch.IntTensor(batch)
     concat_mapping = torch.stack(mapping) # num_graphs x 2
     if isinstance(graphs[-1].z,int):
         concat_z = 0
@@ -559,7 +562,7 @@ def concat_graphs(graphs: List[Data]):
         concat_z = torch.concat(z)
 
     rst = Data(x=concat_x, edge_index=concat_edge_index, edge_mask= concat_edge_mask, edge_mask_original=concat_edge_mask_original,
-                n_id= concat_n_id, mapping= concat_mapping, num_nodes=concat_n_id.shape[0], z=concat_z)
+                n_id= concat_n_id, mapping= concat_mapping, batch = concat_batch, num_nodes=concat_n_id.shape[0], z=concat_z)
     return rst
 
 

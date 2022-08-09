@@ -310,16 +310,23 @@ class BaseModel(object):
         elif self.fusion_type=='minus':
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
         elif self.fusion_type=='mean':
-            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
+            minus = sum_pooling(self.encoder(x, graph.edge_index[:,graph.edge_mask]),graph.batch) # batch_size x src_dst x plus_minus x feat_dim
+            plus = sum_pooling(self.encoder(x, graph.edge_index),graph.batch) # batch_size x src_dst x plus_minus x feat_dim
             out = torch.stack([plus, minus],dim=2).mean(axis=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
         elif self.fusion_type=="original":
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask_original])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
         else:
             raise ValueError("fusion_type must be one of ['att','plus','minus','mean','original']")
-        out = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
+        out = self.predictor(out).squeeze()
         return out
-    
+
+def sum_pooling(x, batch):
+    index = torch.zeros((len(batch),x.shape[0])).to(x.device)
+    start=0
+    for i,b in enumerate(batch):
+        index[i,start:(start+b)] = 1
+        start+=b
+    return torch.matmul(index,x)
 
 
 def create_input_layer(num_nodes, num_node_feats, hidden_channels, use_node_feats=True, drnl=False,
@@ -362,6 +369,7 @@ def create_gnn_layer(input_channels, hidden_channels, num_layers, dropout=0, enc
 
 def create_predictor_layer(hidden_channels, num_layers, dropout=0, predictor_name='MLP'):
     predictor_name = predictor_name.upper()
+    return MLP(hidden_channels, hidden_channels, 1, num_layers, dropout)
     if predictor_name == 'DOT':
         return DotPredictor()
     elif predictor_name == 'BIL':

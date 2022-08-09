@@ -220,3 +220,27 @@ class SemanticAttention(nn.Module):
             if isinstance(lin, nn.Linear):
                 lin.reset_parameters()
         return self
+
+
+class MLP(torch.nn.Module):
+    # adopt a MLP as classifier for graphs
+    def __init__(self,in_channels, hidden_channels, out_channels, num_layers, dropout):
+        super(MLP, self).__init__()
+        self.lins = torch.nn.ModuleList()
+        for i in range(num_layers):
+            first_channels = in_channels if i == 0 else hidden_channels
+            second_channels = out_channels if i == num_layers - 1 else hidden_channels
+            self.lins.append(torch.nn.Linear(first_channels, second_channels))
+        self.dropout = dropout
+    
+    def forward(self, x):
+        for lin in self.lins[:-1]:
+            x = lin(x)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.lins[-1](x)
+        return x
+    
+    def reset_parameters(self):
+        for lin in self.lins:
+            lin.reset_parameters()
