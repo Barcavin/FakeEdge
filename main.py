@@ -57,6 +57,7 @@ def argument():
     parser.add_argument('--drnl', type=str2bool, default=True)
     parser.add_argument('--use_valedges_as_input', type=str2bool, default=False)
     parser.add_argument('--eval_last_best', type=str2bool, default=False)
+    parser.add_argument('--write_out', type=str2bool, default=False)
 
     args = parser.parse_args()
     return args
@@ -216,6 +217,15 @@ def main():
                 scheduler.step()
             torch.cuda.empty_cache()
         
+        if args.write_out:
+            model.test(batch_size=args.batch_size,
+                    evaluator=evaluator,
+                    eval_metric=args.eval_metric,
+                    val_list=val_list,
+                    test_list=test_list,
+                    write_out_file=f"{args.data_name}_Run_{run}_{args.fusion}",
+                    train_list=train_list,
+                    )
         # Run finish
         del train_list
         del val_list

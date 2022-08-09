@@ -87,6 +87,7 @@ class BaseModel(object):
                                         encoder_name=gnn_encoder_name).to(device)
 
         # Predict Layer
+        self.predictor_name = predictor_name.upper()
         self.predictor = create_predictor_layer(hidden_channels=mlp_hidden_channels,
                                                 num_layers=mlp_num_layers,
                                                 dropout=dropout,
@@ -182,8 +183,8 @@ class BaseModel(object):
             pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
             neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
 
-            pos_out = self.batch_forward(pos_g)
-            neg_out = self.batch_forward(neg_g)
+            pos_out = self.forward(pos_g)
+            neg_out = self.forward(neg_g)
 
 
             loss = self.calculate_loss(pos_out, neg_out, num_neg)#, margin=weight_margin)
@@ -202,46 +203,28 @@ class BaseModel(object):
         return total_loss / total_examples
 
     @torch.no_grad()
-    def test(self, batch_size, evaluator, eval_metric, val_list, test_list):
+    def test(self, batch_size, evaluator, eval_metric, val_list, test_list, write_out_file=None, train_list=None):
         self.encoder.eval()
         self.predictor.eval()
         self.semantic_att.eval()
+        
+        if write_out_file:
+            pos_train_edge, neg_train_edge = train_list
+            self.batch_forward(pos_train_edge, batch_size,write_out_file+'_train')
+            write_out_file_val = write_out_file+'_valid'
+            write_out_file_test = write_out_file+'_test'
+        else:
+            write_out_file_val=None
+            write_out_file_test=None
 
+        
         pos_valid_edge,neg_valid_edge = val_list
         pos_test_edge,neg_test_edge = test_list
 
-        pos_valid_pred = []
-        neg_valid_pred = []
-        for perm in DataLoader(range(len(pos_valid_edge)), batch_size):
-            batch_pos_graphs_minus = [pos_valid_edge[i] for i in perm]
-            pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-            pos_out = self.batch_forward(pos_g).cpu()
-            pos_valid_pred.append(pos_out)
-
-        for perm in DataLoader(range(len(neg_valid_edge)), batch_size):
-            batch_neg_graphs_plus = [neg_valid_edge[i] for i in perm]
-            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
-            neg_out = self.batch_forward(neg_g).cpu()
-            neg_valid_pred.append(neg_out)
-
-        pos_valid_pred = torch.cat(pos_valid_pred, dim=0)
-        neg_valid_pred = torch.cat(neg_valid_pred, dim=0)
-        
-        pos_test_pred = []
-        neg_test_pred = []
-        for perm in DataLoader(range(len(pos_test_edge)), batch_size):
-            batch_pos_graphs_minus = [pos_test_edge[i] for i in perm]
-            pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-            pos_out = self.batch_forward(pos_g).cpu()
-            pos_test_pred.append(pos_out)
-        
-        for perm in DataLoader(range(len(neg_test_edge)), batch_size):
-            batch_neg_graphs_plus = [neg_test_edge[i] for i in perm]
-            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
-            neg_out = self.batch_forward(neg_g).cpu()
-            neg_test_pred.append(neg_out)
-        pos_test_pred = torch.cat(pos_test_pred, dim=0)
-        neg_test_pred = torch.cat(neg_test_pred, dim=0)
+        pos_valid_pred = self.batch_forward(pos_valid_edge, batch_size,write_out_file_val)
+        neg_valid_pred = self.batch_forward(neg_valid_edge, batch_size)
+        pos_test_pred = self.batch_forward(pos_test_edge, batch_size,write_out_file_test)
+        neg_test_pred = self.batch_forward(neg_test_edge, batch_size)
 
 
         if eval_metric == 'hits':
@@ -297,7 +280,7 @@ class BaseModel(object):
         }
         torch.save(state, model_path)
 
-    def batch_forward(self, graph: Data):
+    def forward(self, graph: Data, return_hidden=False):
         x = self.create_input_feat(graph)
         if self.fusion_type=='att': #['att','plus','minus','mean']
             plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
@@ -317,8 +300,37 @@ class BaseModel(object):
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask_original])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
         else:
             raise ValueError("fusion_type must be one of ['att','plus','minus','mean','original']")
-        out = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
-        return out
+        pred = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
+        if return_hidden:
+            if self.predictor_name == "MLP":
+                out = out[:,0,:] * out[:,1,:]
+            elif self.predictor_name == "DOT":
+                out = (out[:,0,:] * out[:,1,:]).sum(dim=-1)
+            else:
+                raise NotImplementedError
+            return pred, out
+        else:
+            return pred
+
+    def batch_forward(self,data_list,batch_size,write_out_file=None):
+        pred = []
+        embedding = []
+        for perm in DataLoader(range(len(data_list)), batch_size):
+            batch = [data_list[i] for i in perm]
+            g = concat_graphs(batch).to(self.device)
+            if write_out_file:
+                out, embed = self.forward(g,True)
+                embed = embed.cpu()
+                embedding.append(embed)
+            else:
+                out = self.forward(g)
+            out=out.cpu()
+            pred.append(out)
+        concat = torch.cat(pred, dim=0)
+        if write_out_file:
+            embedding = torch.cat(embedding)
+            torch.save(embedding, write_out_file+'_hidden_pos.pt')
+        return concat
     
 
 
