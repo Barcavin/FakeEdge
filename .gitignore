@@ -144,3 +144,5 @@ dmypy.json
 wandb/
 results/
 *.o*
+*.pt
+*.txt

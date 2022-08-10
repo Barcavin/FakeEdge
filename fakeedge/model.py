@@ -63,7 +63,7 @@ class BaseModel(object):
         self.weight_decay = weight_decay
         self.drnl = drnl
         self.fusion_type = fusion_type
-        assert fusion_type in ['att','plus','minus','mean', 'original']
+        assert fusion_type in ['att','plus','minus','mean', 'original', 'concat']
         # Input Layer
         self.input_channels, self.emb, self.drnl_emb = create_input_layer(num_nodes=num_nodes,
                                                            num_node_feats=num_node_feats,
@@ -94,7 +94,10 @@ class BaseModel(object):
                                                 predictor_name=predictor_name).to(device)
 
         # semantic attention
-        self.semantic_att = SemanticAttention(in_size=gnn_hidden_channels).to(device)
+        if self.fusion_type == 'concat':
+            self.semantic_att = ConcatFuse(in_channels=gnn_hidden_channels).to(device)
+        else:# if self.fusion_type == 'att':
+            self.semantic_att = SemanticAttention(in_size=gnn_hidden_channels).to(device)
 
         # Parameters and Optimizer
         self.para_list = list(self.encoder.parameters()) + list(self.predictor.parameters()) + list(self.semantic_att.parameters())
@@ -293,9 +296,13 @@ class BaseModel(object):
         elif self.fusion_type=='minus':
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
         elif self.fusion_type=='mean':
+            plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
             minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            plus = self.encoder(x, graph.edge_index, graph.mapping) # batch_size x src_dst x plus_minus x feat_dim
             out = torch.stack([plus, minus],dim=2).mean(axis=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
+        elif self.fusion_type=='concat':
+            plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
+            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
+            out = self.semantic_att(plus,minus) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
         elif self.fusion_type=="original":
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask_original])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
         else:
