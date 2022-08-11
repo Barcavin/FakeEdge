@@ -18,7 +18,7 @@ import random
 
 cur_dir = os.path.dirname(os.path.realpath(__file__))
 par_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-sys.path.append('%s/software/' % par_dir)
+sys.path.append('%s/software/' % cur_dir)
 from drnl import drnl_node_labeling
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -379,7 +379,7 @@ def set_init_attribute_representation(data,args):
         else:
             edge_index_observed=torch.cat((edge_index_observed.clone().detach(),torch.tensor([[num_nodes-1],[num_nodes-1]])),dim=1)
         if args.init_representation == 'gic':
-            args.par_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
+            args.par_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),"."))
             sys.path.append('%s/software/GIC/' % args.par_dir)
             from GICEmbs import CalGIC
             data_observed.x, auc, ap = CalGIC(edge_index_observed, x, args.data_name, val_and_test,args)

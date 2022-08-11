@@ -453,10 +453,11 @@ if not os.path.exists(args.res_dir):
 #     copy('seal_link_pred.py', args.res_dir)
 #     copy('utils.py', args.res_dir)
 log_file = os.path.join("SEAL",args.res_dir, 'log.txt')
+Path(log_file).parents[0].mkdir(parents=True, exist_ok=True)
 # Save command line input.
 cmd_input = 'python ' + ' '.join(sys.argv) + '\n'
-with open(os.path.join("SEAL",args.res_dir, 'cmd_input.txt'), 'a') as f:
-    f.write(cmd_input)
+# with open(os.path.join("SEAL",args.res_dir, 'cmd_input.txt'), 'a') as f:
+#     f.write(cmd_input)
 print('Command line input: ' + cmd_input + ' is saved.')
 with open(log_file, 'a') as f:
     f.write('\n' + cmd_input)
