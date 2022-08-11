@@ -29,7 +29,7 @@ class Logger(object):
             print(f'   Final Test: {result[argmax, 1]:.2f}', file=f)
             if f==sys.stdout:
                 wandb.log({f"{self.name}:Run Highest Valid": result[:, 0].max(),f"{self.name}:Run Final Test":result[argmax, 1]}, step=run)
-            return result[argmax, 1]
+            return result[argmax, 1].item()
         else:
             result = 100 * torch.tensor(self.results)
 

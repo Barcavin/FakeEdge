@@ -97,7 +97,7 @@ def main():
     log_file = res_dir / log_file_name
     csv = Path("results/")
     csv.mkdir(exist_ok=True)
-    csv_file_name = f"{args.data_name}_{args.fusion}_{int(time.time())}_PLNLP.csv"
+    csv_file_name = csv / f"{args.data_name}_{args.fusion}_{int(time.time())}_PLNLP.csv"
 
     wandb.run.summary["log_file"] = str(log_file)
     with open(log_file, 'a') as f:
