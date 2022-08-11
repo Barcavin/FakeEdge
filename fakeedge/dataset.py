@@ -3,7 +3,6 @@ from torch_geometric.data import InMemoryDataset
 from fakeedge.utils import get_pos_neg_edges, process_graph, root_dir
 
 
-
 class FakeEdgeDataset(InMemoryDataset):
     def __init__(self, root, data, edges, positive, num_hops, split='train', #ratio_per_hop=1.0,
                  max_nodes_per_hop=None,dynamic=False):

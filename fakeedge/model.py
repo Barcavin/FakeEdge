@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from torch.utils.data import DataLoader
+from torch_geometric.loader import DataLoader
 from fakeedge.layer import *
 from fakeedge.loss import *
 from fakeedge.utils import *
@@ -177,14 +177,10 @@ class BaseModel(object):
         total_loss = total_examples = 0 
         pos_train_edge, neg_train_edge = train_list
         
-        for perm in DataLoader(range(len(pos_train_edge)), batch_size, shuffle=True):
+        for pos_g,neg_g in zip(DataLoader(pos_train_edge, batch_size, shuffle=True),
+                        DataLoader(neg_train_edge, batch_size*num_neg, shuffle=True)):
             self.optimizer.zero_grad()
-
-            batch_pos_graphs_minus = [pos_train_edge[i] for i in perm]
-            batch_neg_graphs_plus = [neg_train_edge[i*num_neg+j] for i in perm for j in range(num_neg)]
-
-            pos_g = concat_graphs(batch_pos_graphs_minus).to(self.device)
-            neg_g = concat_graphs(batch_neg_graphs_plus).to(self.device)
+            pos_g,neg_g = pos_g.to(self.device),neg_g.to(self.device)
 
             pos_out = self.forward(pos_g)
             neg_out = self.forward(neg_g)
@@ -286,35 +282,41 @@ class BaseModel(object):
     def forward(self, graph: Data, return_hidden=False):
         x = self.create_input_feat(graph)
         if self.fusion_type=='att': #['att','plus','minus','mean']
-            plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            encoded = torch.stack([plus, minus],dim=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
-            encoded = encoded.reshape(-1,2,self.semantic_att.in_size) # (batch_size x src_dst) x plus_minus x feat_dim
-            out = self.semantic_att(encoded).reshape(-1,2,self.semantic_att.in_size) # batch_size x src_dst x feat_dim
+            plus = self.encoder(x, graph.edge_index) # all nodes x D
+            plus = plus[graph.mapping] # 2(src and dst) x batch_size x hidden_size
+            plus = plus[0] * plus[1] # batch_size x hidden_size
+
+            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])
+            minus = minus[graph.mapping] 
+            minus = minus[0] * minus[1] # batch_size x hidden_size
+            encoded = torch.stack([plus, minus],dim=1) # batch_size x plus_minus x hidden_size
+            out = self.semantic_att(encoded) # batch_size x feat_dim
         elif self.fusion_type=='plus':
-            out = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
+            out = self.encoder(x, graph.edge_index)[graph.mapping]
+            out = out[0] * out[1]
         elif self.fusion_type=='minus':
-            out = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
+            out = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping]
+            out = out[0] * out[1]
         elif self.fusion_type=='mean':
-            plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            out = torch.stack([plus, minus],dim=2).mean(axis=2) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
-        elif self.fusion_type=='concat':
-            plus = self.encoder(x, graph.edge_index)[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
-            out = self.semantic_att(plus,minus) # # N x 2(src and dst) x 2(plus and minus) x feat_dim
+            plus = self.encoder(x, graph.edge_index) # all nodes x D
+            plus = plus[graph.mapping] # 2(src and dst) x batch_size x hidden_size
+            plus = plus[0] * plus[1] # batch_size x hidden_size
+
+            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])
+            minus = minus[graph.mapping] 
+            minus = minus[0] * minus[1] # batch_size x hidden_size
+            out = torch.stack([plus, minus],dim=1).mean(axis=1)
+        # elif self.fusion_type=='concat':
+        #     plus = self.encoder(x, graph.edge_index)[graph.mapping] 
+        #     minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] 
+        #     out = self.semantic_att(plus,minus) 
         elif self.fusion_type=="original":
-            out = self.encoder(x, graph.edge_index[:,graph.edge_mask_original])[graph.mapping] # batch_size x src_dst x plus_minus x feat_dim
+            out = self.encoder(x, graph.edge_index[:,graph.edge_mask_original])[graph.mapping]
+            out = out[0] * out[1]
         else:
             raise ValueError("fusion_type must be one of ['att','plus','minus','mean','original']")
-        pred = self.predictor(out[:,0,:], out[:,1,:]).squeeze()
+        pred = self.predictor(out).squeeze()
         if return_hidden:
-            if self.predictor_name == "MLP":
-                out = out[:,0,:] * out[:,1,:]
-            elif self.predictor_name == "DOT":
-                out = (out[:,0,:] * out[:,1,:]).sum(dim=-1)
-            else:
-                raise NotImplementedError
             return pred, out
         else:
             return pred
@@ -322,9 +324,8 @@ class BaseModel(object):
     def batch_forward(self,data_list,batch_size,write_out_file=None):
         pred = []
         embedding = []
-        for perm in DataLoader(range(len(data_list)), batch_size):
-            batch = [data_list[i] for i in perm]
-            g = concat_graphs(batch).to(self.device)
+        for g in DataLoader(data_list, batch_size):
+            g = g.to(self.device)
             if write_out_file:
                 out, embed = self.forward(g,True)
                 embed = embed.cpu()
@@ -381,18 +382,18 @@ def create_gnn_layer(input_channels, hidden_channels, num_layers, dropout=0, enc
 
 def create_predictor_layer(hidden_channels, num_layers, dropout=0, predictor_name='MLP'):
     predictor_name = predictor_name.upper()
-    if predictor_name == 'DOT':
-        return DotPredictor()
-    elif predictor_name == 'BIL':
-        return BilinearPredictor(hidden_channels)
-    elif predictor_name == 'MLP':
+    # if predictor_name == 'DOT':
+    #     return DotPredictor()
+    # elif predictor_name == 'BIL':
+    #     return BilinearPredictor(hidden_channels)
+    if predictor_name == 'MLP':
         return MLPPredictor(hidden_channels, hidden_channels, 1, num_layers, dropout)
-    elif predictor_name == 'MLPDOT':
-        return MLPDotPredictor(hidden_channels, 1, num_layers, dropout)
-    elif predictor_name == 'MLPBIL':
-        return MLPBilPredictor(hidden_channels, 1, num_layers, dropout)
-    elif predictor_name == 'MLPCAT':
-        return MLPCatPredictor(hidden_channels, hidden_channels, 1, num_layers, dropout)
+    # elif predictor_name == 'MLPDOT':
+    #     return MLPDotPredictor(hidden_channels, 1, num_layers, dropout)
+    # elif predictor_name == 'MLPBIL':
+    #     return MLPBilPredictor(hidden_channels, 1, num_layers, dropout)
+    # elif predictor_name == 'MLPCAT':
+    #     return MLPCatPredictor(hidden_channels, hidden_channels, 1, num_layers, dropout)
 
 
 def CN(A, edge_index, batch_size=100000):

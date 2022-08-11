@@ -2,16 +2,16 @@
 from argparse import Namespace
 from pathlib import Path
 import random
-from typing import List
+from typing import List, Any
 
 import numpy as np
 import scipy.sparse as ssp
 import torch
+import torch_geometric
 import torch_geometric.transforms as T
 from ogb.linkproppred import PygLinkPropPredDataset
 from scipy.sparse.csgraph import shortest_path
 from sklearn import metrics
-from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid, FakeDataset
 from torch_geometric.utils import (from_scipy_sparse_matrix, is_undirected,
                                    to_undirected)
@@ -21,6 +21,21 @@ from tqdm import tqdm
 from fakeedge.negative_sample import (global_neg_sample, global_perm_neg_sample,
                                    local_neg_sample)
 root_dir= Path.home()/'files'
+
+class Data(torch_geometric.data.Data):
+    def __inc__(self, key: str, value: Any, *args, **kwargs) -> Any:
+        if 'batch' in key:
+            return int(value.max()) + 1
+        elif 'index' in key or key == 'face' or key == 'mapping':
+            return self.num_nodes
+        else:
+            return 0
+
+    def __cat_dim__(self, key, value, *args, **kwargs):
+        if 'index' in key or 'face' in key or key == 'mapping':
+            return 1
+        else:
+            return 0
 
 def set_random_seed(seed):
     random.seed(seed)
@@ -405,7 +420,7 @@ def k_hop_subgraph(node_idx, num_hops, edge_index, max_nodes_per_hop = None,num_
     node_idx = row.new_full((num_nodes, ), -1)
     node_idx[subset] = torch.arange(subset.size(0), device=row.device)
     edge_index = node_idx[edge_index]
-
+    inv = inv.view(-1, 1)
     return subset, edge_index, inv, edge_mask
 
 def plus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=None):
@@ -419,8 +434,8 @@ def plus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=Non
     else:
         x_sub = None
     edge_index_p = edge_index_m
-    edge_index_p = torch.cat((edge_index_p, mapping.view(-1,1)),dim=1)
-    edge_index_p = torch.cat((edge_index_p, mapping[[1,0]].view(-1,1)),dim=1)
+    edge_index_p = torch.cat((edge_index_p, mapping),dim=1)
+    edge_index_p = torch.cat((edge_index_p, mapping[[1,0]]),dim=1)
 
     #edge_mask marks the edge under perturbation, i.e., the candidate edge for LP
     edge_mask = torch.ones(edge_index_p.size(1),dtype=torch.bool)
@@ -430,7 +445,7 @@ def plus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=Non
 
     if drnl:
         num_nodes = nodes.shape[0]
-        z = drnl_node_labeling(edge_index_m, mapping[0],mapping[1],num_nodes)
+        z = drnl_node_labeling(edge_index_m, mapping[0,0],mapping[1,0],num_nodes)
     else:
         z = 0
     data = Data(edge_index = edge_index_p, x = x_sub, 
@@ -460,16 +475,16 @@ def minus_edge(data_observed, p_edge, num_hops, drnl=False, max_nodes_per_hop=No
     #edge_mask marks the edge under perturbation, i.e., the candidate edge for LP
     edge_mask = torch.ones(edge_index_p.size(1), dtype = torch.bool)
     edge_mask_original = torch.ones(edge_index_p.size(1), dtype = torch.bool)
-    ind = torch.where((edge_index_p == mapping.view(-1,1)).all(dim=0))
+    ind = torch.where((edge_index_p == mapping).all(dim=0))
     assert ind[0].numel() > 0, "Not Found the adding edge in the graph"
     edge_mask[ind[0]] = False
     
-    ind = torch.where((edge_index_p == mapping[[1,0]].view(-1,1)).all(dim=0))
+    ind = torch.where((edge_index_p == mapping[[1,0]]).all(dim=0))
     assert ind[0].numel() > 0, "Not Found the adding edge in the graph"
     edge_mask[ind[0]] = False
     if drnl:
         num_nodes = nodes.shape[0]
-        z = drnl_node_labeling(edge_index_p[:,edge_mask], mapping[0],mapping[1],num_nodes)
+        z = drnl_node_labeling(edge_index_p[:,edge_mask], mapping[0,0],mapping[1,0],num_nodes)
     else:
         z = 0
     data = Data(edge_index = edge_index_p, x = x_sub, 
@@ -521,49 +536,7 @@ def drnl_node_labeling(edge_index, src, dst, num_nodes):
     return z.to(torch.int)
 
 
-def concat_graphs(graphs: List[Data]):
-    """
-        Concatenate subgraphs to a large disconnected graph.
-        The idx in each subgraph starts from 0. Thus, the idx in the concat large graph need to increment
-    """
-    x = []
-    edge_index = []
-    edge_mask = []
-    edge_mask_original = []
-    n_id = []
-    mapping = []
-    z = []
-    start=0
-    for g in graphs:
-        x.append(g.x)
-        edge_index.append(g.edge_index+start)
-        edge_mask.append(g.edge_mask)
-        edge_mask_original.append(g.edge_mask_original)
-        n_id.append(g.n_id)
-        mapping.append(g.mapping+start)
-        start += g.num_nodes
-        z.append(g.z)
-    
-    if graphs[-1].x is None:
-        concat_x = None
-    else:
-        concat_x = torch.concat(x,axis=0)
-    concat_edge_index = torch.concat(edge_index,axis=1)
-    concat_edge_mask = torch.concat(edge_mask)
-    concat_edge_mask_original = torch.concat(edge_mask_original)
-    concat_n_id = torch.concat(n_id)
-    concat_mapping = torch.stack(mapping) # num_graphs x 2
-    if isinstance(graphs[-1].z,int):
-        concat_z = 0
-    else:
-        concat_z = torch.concat(z)
-
-    rst = Data(x=concat_x, edge_index=concat_edge_index, edge_mask= concat_edge_mask, edge_mask_original=concat_edge_mask_original,
-                n_id= concat_n_id, mapping= concat_mapping, num_nodes=concat_n_id.shape[0], z=concat_z)
-    return rst
-
-
-def fake_edge(num_hops, data, node_pairs, plus: bool, drnl:bool, max_nodes_per_hop:int = None):
+def fake_edge_process(num_hops, data, node_pairs, plus: bool, drnl:bool, max_nodes_per_hop:int = None):
     """
         edge_index : (2,num_edges)
         node_pairs : (num_pairs,2)
@@ -584,5 +557,5 @@ def process_graph(split, data, edges, positive:bool, num_hops, drnl:bool, max_no
         plus = False # only remove edges when it's training set and positive edges
     else:
         plus = True # for negative edges, or val/test set, always plus edges
-    processed = fake_edge(num_hops, data, edges, plus, drnl, max_nodes_per_hop)
+    processed = fake_edge_process(num_hops, data, edges, plus, drnl, max_nodes_per_hop)
     return processed
