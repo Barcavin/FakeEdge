@@ -18,7 +18,7 @@ from torch_geometric.utils import (from_scipy_sparse_matrix, is_undirected,
 from torch_sparse import SparseTensor, coalesce
 from tqdm import tqdm
 
-from fakeedge.negative_sample import (global_neg_sample, global_perm_neg_sample,
+from plnlp.negative_sample import (global_neg_sample, global_perm_neg_sample,
                                    local_neg_sample)
 root_dir= Path.home()/'files'
 

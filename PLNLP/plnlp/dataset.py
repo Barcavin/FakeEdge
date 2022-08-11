@@ -1,6 +1,6 @@
 import torch
 from torch_geometric.data import InMemoryDataset
-from fakeedge.utils import get_pos_neg_edges, process_graph, root_dir
+from plnlp.utils import get_pos_neg_edges, process_graph, root_dir
 
 
 class FakeEdgeDataset(InMemoryDataset):

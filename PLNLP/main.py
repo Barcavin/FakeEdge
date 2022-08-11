@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
+import json
 import time
 from pathlib import Path
 
@@ -7,10 +8,10 @@ import torch
 from ogb.linkproppred import Evaluator
 
 import wandb
-from fakeedge.logger import Logger
-from fakeedge.model import BaseModel
-from fakeedge.utils import data_process, set_random_seed
-from fakeedge.dataset import get_dataset
+from plnlp.logger import Logger
+from plnlp.model import BaseModel
+from plnlp.utils import data_process, set_random_seed
+from plnlp.dataset import get_dataset
 
 
 def argument():
@@ -56,8 +57,9 @@ def argument():
     parser.add_argument('--train_node_emb', type=str2bool, default=False)
     parser.add_argument('--drnl', type=str2bool, default=True)
     parser.add_argument('--use_valedges_as_input', type=str2bool, default=False)
-    parser.add_argument('--eval_last_best', type=str2bool, default=False)
+    parser.add_argument('--eval_last_best', type=str2bool, default=True)
     parser.add_argument('--write_out', type=str2bool, default=False)
+    parser.add_argument('--csv', type=str2bool, default=False)
 
     args = parser.parse_args()
     return args
@@ -93,6 +95,10 @@ def main():
     res_dir.mkdir(exist_ok=True)
     log_file_name = 'log_' + args.data_name + '_' + str(int(time.time())) + '.txt'
     log_file = res_dir / log_file_name
+    csv = Path("results/")
+    csv.mkdir(exist_ok=True)
+    csv_file_name = f"{args.data_name}_{args.fusion}_{int(time.time())}_PLNLP.csv"
+
     wandb.run.summary["log_file"] = str(log_file)
     with open(log_file, 'a') as f:
         f.write(str(args) + '\n')
@@ -230,13 +236,17 @@ def main():
         del train_list
         del val_list
         del test_list
-
+        csv = {}
         for key in loggers.keys():
             print(key)
-            loggers[key].print_statistics(run, last_best=args.eval_last_best)
+            csv[key] = loggers[key].print_statistics(run, last_best=args.eval_last_best)
             with open(log_file, 'a') as f:
                 print(key, file=f)
                 loggers[key].print_statistics(run, f=f, last_best=args.eval_last_best)
+            
+        if args.csv:
+            with open(csv_file_name, 'a') as f:
+                f.write(json.dumps(csv) + '\n')
 
     for key in loggers.keys():
         print(key)

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from torch_geometric.loader import DataLoader
-from fakeedge.layer import *
-from fakeedge.loss import *
-from fakeedge.utils import *
+from plnlp.layer import *
+from plnlp.loss import *
+from plnlp.utils import *
 
 MAX_Z = 1000
 
