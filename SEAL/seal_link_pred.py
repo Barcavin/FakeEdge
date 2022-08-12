@@ -464,8 +464,34 @@ with open(log_file, 'a') as f:
 
 csv = Path("results/")
 csv.mkdir(exist_ok=True)
-csv_file_name = csv / f"{args.dataset}_{args.fuse}_{int(time.time())}_{'SEAL' if args.model=='DGCNN' else args.model}.csv"
+csv_file_name = csv / f"{'SEAL' if args.model=='DGCNN' else args.model}_{args.dataset}_{args.fuse}_{int(time.time())}.csv"
 set_random_seed(args.seed)
+
+
+
+if args.dataset.startswith('ogbl-citation'):
+    args.eval_metric = 'mrr'
+    directed = True
+else:
+    args.eval_metric = 'hits'
+    directed = False
+evaluator = Evaluator(name="ogbl-ddi")
+if args.eval_metric == 'hits':
+    loggers = {
+        'Hits@20': Logger(args.runs, args),
+        'Hits@50': Logger(args.runs, args),
+        'Hits@100': Logger(args.runs, args),
+        'aucroc': Logger(args.runs, args),
+        'aucpr': Logger(args.runs, args),
+    }
+elif args.eval_metric == 'mrr':
+    loggers = {
+        'MRR': Logger(args.runs, args),
+    }
+elif args.eval_metric == 'auc':
+    loggers = {
+        'AUC': Logger(args.runs, args),
+    }
 
 for run in range(args.runs):
     if args.dataset.startswith('ogbl'):
@@ -477,7 +503,7 @@ for run in range(args.runs):
     elif args.dataset in ["cora",\
                         "citeseer",\
                         "pubmed",]:
-        path = osp.join('dataset', args.dataset)
+        path = Path.home() / 'files'
         dataset = Planetoid(path, args.dataset)
         # split_edge = do_edge_split(dataset, args.fast_split)
         # data = dataset[0]
@@ -497,13 +523,6 @@ for run in range(args.runs):
     else:
         raise NotImplementedError
 
-    if args.dataset.startswith('ogbl-citation'):
-        args.eval_metric = 'mrr'
-        directed = True
-    else:
-        args.eval_metric = 'hits'
-        directed = False
-
     if args.use_valedges_as_input:
         val_edge_index = split_edge['valid']['edge'].t()
         if not directed:
@@ -513,23 +532,6 @@ for run in range(args.runs):
         data.edge_weight = torch.cat([data.edge_weight, val_edge_weight], 0)
 
     # if args.dataset.startswith('ogbl'):
-    evaluator = Evaluator(name="ogbl-ddi")
-    if args.eval_metric == 'hits':
-        loggers = {
-            'Hits@20': Logger(args.runs, args),
-            'Hits@50': Logger(args.runs, args),
-            'Hits@100': Logger(args.runs, args),
-            'aucroc': Logger(args.runs, args),
-            'aucpr': Logger(args.runs, args),
-        }
-    elif args.eval_metric == 'mrr':
-        loggers = {
-            'MRR': Logger(args.runs, args),
-        }
-    elif args.eval_metric == 'auc':
-        loggers = {
-            'AUC': Logger(args.runs, args),
-        }
         
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

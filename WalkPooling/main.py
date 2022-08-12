@@ -97,7 +97,7 @@ parser.add_argument('--epoch-num', type=int, default=50)
 parser.add_argument('--MSE', type=str2bool, default=False)
 parser.add_argument('--log', type=str, default=None,
                     help='log by tensorboard, default is None')
-parser.add_argument('--csv', action='store_true')                
+parser.add_argument('--csv',type=str, default=None)                
 
 args = parser.parse_args()
 
@@ -148,7 +148,7 @@ print ("-"*105)
 
 csv = Path("results/")
 csv.mkdir(exist_ok=True)
-csv_file_name = csv / f"{args.data_name}_{args.fuse}_{int(time.time())}_WalkPool.csv"
+csv_file_name = csv / f"WalkPool_{args.data_name}_{args.fuse}_{args.csv}.csv"
 
 walk_len = args.walk_len
 heads = args.heads
@@ -283,11 +283,11 @@ print(f'From AUC: Final Test AUC: {Final_Test_AUC_fromAUC:.4f}, Final Test AP: {
 for key,value in Best_Test_Hits.items():
     print(f"Final Test {key}:{value:.4f}")
 
-    if args.csv:
-        csv = {
-            'aucroc': Final_Test_AUC_fromAUC,
-            'aucpr': Final_Test_AP_fromAUC,
-            **Best_Test_Hits
-        }
-        with open(csv_file_name, 'a') as f:
-            f.write(json.dumps(csv) + '\n')
+if args.csv:
+    csv = {
+        'aucroc': Final_Test_AUC_fromAUC,
+        'aucpr': Final_Test_AP_fromAUC,
+        **Best_Test_Hits
+    }
+    with open(csv_file_name, 'a') as f:
+        f.write(json.dumps(csv) + '\n')
