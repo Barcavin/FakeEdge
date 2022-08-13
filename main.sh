@@ -17,7 +17,7 @@ fuse=$fuse
 if [ "$method" = "SEAL" ]
 then
     echo "Run SEAL"
-    bash seal.sh $method $data $fuse
+    bash seal.sh $method $data $fuse #&& python -c "import wandb;wandb.init(project='FakeEdge', entity='kevindong')"
 elif [ "$method" = "GCN" ] || [ "$method" = "SAGE" ] || [ "$method" = "GIN" ]
 then
     echo "RUN $method"

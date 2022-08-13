@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import sys
-import wandb
+# import wandb
 
 
 class Logger(object):
@@ -27,8 +27,8 @@ class Logger(object):
             print(f'Highest Valid: {result[:, 0].max():.2f}', file=f)
             print(f'Highest Eval Point: {argmax + 1}', file=f)
             print(f'   Final Test: {result[argmax, 1]:.2f}', file=f)
-            if f==sys.stdout:
-                wandb.log({f"{self.name}:Run Highest Valid": result[:, 0].max(),f"{self.name}:Run Final Test":result[argmax, 1]}, step=run)
+            # if f==sys.stdout:
+                # wandb.log({f"{self.name}:Run Highest Valid": result[:, 0].max(),f"{self.name}:Run Final Test":result[argmax, 1]}, step=run)
             return result[argmax, 1].item()
         else:
             result = 100 * torch.tensor(self.results)
@@ -50,11 +50,11 @@ class Logger(object):
             print(f'All runs:', file=f)
             r = best_result[:, 0]
             print(f'Highest Valid: {r.mean():.2f}  {r.std():.2f}', file=f)
-            if f==sys.stdout:
-                wandb.run.summary[f"{self.name}:Highest Valid"] = r.mean()
+            # if f==sys.stdout:
+            #     wandb.run.summary[f"{self.name}:Highest Valid"] = r.mean()
 
             r = best_result[:, 1]
             print(f'   Final Test: {r.mean():.2f}  {r.std():.2f}', file=f)
-            if f==sys.stdout:
-                wandb.run.summary[f"{self.name}:Final Test"] = r.mean()
+            # if f==sys.stdout:
+            #     wandb.run.summary[f"{self.name}:Final Test"] = r.mean()
 

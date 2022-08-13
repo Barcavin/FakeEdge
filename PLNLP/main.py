@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 from ogb.linkproppred import Evaluator
 
-import wandb
+# import wandb
 from plnlp.logger import Logger
 from plnlp.model import BaseModel
 from plnlp.utils import data_process, set_random_seed
@@ -78,8 +78,8 @@ def str2bool(v):
 def main():
     args = argument()
     print(args)
-    wandb.init(project="FakeEdge", entity='kevindong',group=args.data_name)
-    wandb.config.update(args)
+    # wandb.init(project="FakeEdge", entity='kevindong',group=args.data_name)
+    # wandb.config.update(args)
     set_random_seed(42)
 
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
@@ -99,7 +99,7 @@ def main():
     csv.mkdir(exist_ok=True)
     csv_file_name = csv / f"PLNLP_{args.data_name}_{args.fusion}_{int(time.time())}.csv"
 
-    wandb.run.summary["log_file"] = str(log_file)
+    # wandb.run.summary["log_file"] = str(log_file)
     with open(log_file, 'a') as f:
         f.write(str(args) + '\n')
 
@@ -197,7 +197,7 @@ def main():
                     loggers[key].add_result(run, result)
 
                 spent_time = time.time() - start_time
-                wandb.log({f"Loss :Run {run}":loss})
+                # wandb.log({f"Loss :Run {run}":loss})
                 for key, result in results.items():
                     valid_res, test_res = result
                     to_print = (f'Run: {run + 1:02d}, '
@@ -208,8 +208,8 @@ def main():
                                 f'Test: {100 * test_res:.2f}%')
                     print(key)
                     print(to_print)
-                    wandb.log({f"{key}:Run {run} Valid":100 * valid_res,
-                                f"{key}:Run {run} Test":100 * test_res})
+                    # wandb.log({f"{key}:Run {run} Valid":100 * valid_res,
+                    #             f"{key}:Run {run} Test":100 * test_res})
                     with open(log_file, 'a') as f:
                         print(key, file=f)
                         print(to_print, file=f)
