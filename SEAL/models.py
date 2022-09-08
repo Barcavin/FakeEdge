@@ -17,7 +17,7 @@ import pdb
 
 class GCN(torch.nn.Module):
     def __init__(self, hidden_channels, num_layers, max_z, train_dataset, 
-                 use_feature=False, node_embedding=None, dropout=0.5, fuse='minus'):
+                 use_feature=False, node_embedding=None, dropout=0.5, fuse='minus', pooling="hadamard"):
         super(GCN, self).__init__()
         self.use_feature = use_feature
         self.node_embedding = node_embedding
@@ -38,6 +38,7 @@ class GCN(torch.nn.Module):
         self.lin1 = Linear(hidden_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
+        self.pooling = pooling
         self.fuse = fuse
         if self.fuse=='att':
             self.att = SemanticAttention(hidden_channels)
@@ -78,18 +79,23 @@ class GCN(torch.nn.Module):
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.convs[-1](x, edge_index, edge_weight)
-        if True:  # center pooling
+        if self.pooling=="hadamard":  # hadamard pooling
             _, center_indices = np.unique(batch.cpu().numpy(), return_index=True)
             x_src = x[center_indices]
             x_dst = x[center_indices + 1]
             x = (x_src * x_dst)
-        else:  # sum pooling
+        elif self.pooling=="center_pooling":  # center_pooling
+            _, center_indices = np.unique(batch.cpu().numpy(), return_index=True)
+            x_src = x[center_indices]
+            x_dst = x[center_indices + 1]
+            x = (x_src + x_dst)
+        elif self.pooling=="sum_pooling":  # sum pooling
             x = global_add_pool(x, batch)
         return x
 
 class SAGE(torch.nn.Module):
     def __init__(self, hidden_channels, num_layers, max_z, train_dataset=None, 
-                 use_feature=False, node_embedding=None, dropout=0.5, fuse='minus'):
+                 use_feature=False, node_embedding=None, dropout=0.5, fuse='minus', pooling="hadamard"):
         super(SAGE, self).__init__()
         self.use_feature = use_feature
         self.node_embedding = node_embedding
@@ -110,6 +116,7 @@ class SAGE(torch.nn.Module):
         self.lin1 = Linear(hidden_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
+        self.pooling = pooling
         self.fuse = fuse
         if self.fuse=='att':
             self.att = SemanticAttention(hidden_channels)
@@ -126,12 +133,17 @@ class SAGE(torch.nn.Module):
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.convs[-1](x, edge_index)
-        if True:  # center pooling
+        if self.pooling=="hadamard":  # hadamard pooling
             _, center_indices = np.unique(batch.cpu().numpy(), return_index=True)
             x_src = x[center_indices]
             x_dst = x[center_indices + 1]
             x = (x_src * x_dst)
-        else:  # sum pooling
+        elif self.pooling=="center_pooling":  # center_pooling
+            _, center_indices = np.unique(batch.cpu().numpy(), return_index=True)
+            x_src = x[center_indices]
+            x_dst = x[center_indices + 1]
+            x = (x_src + x_dst)
+        elif self.pooling=="sum_pooling":  # sum pooling
             x = global_add_pool(x, batch)
         return x
 

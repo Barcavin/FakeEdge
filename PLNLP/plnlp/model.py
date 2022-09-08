@@ -63,7 +63,7 @@ class BaseModel(object):
         self.weight_decay = weight_decay
         self.drnl = drnl
         self.fusion_type = fusion_type
-        assert fusion_type in ['att','plus','minus','mean', 'original', 'concat']
+        assert fusion_type in ['att','plus','minus','mean', 'original', 'concat', 'hadamard']
         # Input Layer
         self.input_channels, self.emb, self.drnl_emb = create_input_layer(num_nodes=num_nodes,
                                                            num_node_feats=num_node_feats,
@@ -306,6 +306,15 @@ class BaseModel(object):
             minus = minus[graph.mapping] 
             minus = minus[0] * minus[1] # batch_size x hidden_size
             out = torch.stack([plus, minus],dim=1).mean(axis=1)
+        elif self.fusion_type=='hadamard':
+            plus = self.encoder(x, graph.edge_index) # all nodes x D
+            plus = plus[graph.mapping] # 2(src and dst) x batch_size x hidden_size
+            plus = plus[0] * plus[1] # batch_size x hidden_size
+
+            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])
+            minus = minus[graph.mapping] 
+            minus = minus[0] * minus[1] # batch_size x hidden_size
+            out = plus * minus
         # elif self.fusion_type=='concat':
         #     plus = self.encoder(x, graph.edge_index)[graph.mapping] 
         #     minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] 

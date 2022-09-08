@@ -33,6 +33,7 @@ from ogb.linkproppred import PygLinkPropPredDataset, Evaluator
 import warnings
 from scipy.sparse import SparseEfficiencyWarning
 warnings.simplefilter('ignore', SparseEfficiencyWarning)
+warnings.simplefilter('ignore', UserWarning)
 
 from utils import *
 from models import *
@@ -431,7 +432,8 @@ parser.add_argument('--test_multiple_models', action='store_true',
 parser.add_argument('--use_heuristic', type=str, default=None, 
                     help="test a link prediction heuristic (CN or AA)")
 parser.add_argument('--write_out', action='store_true')
-parser.add_argument('--csv', action='store_true')
+parser.add_argument('--pooling', type=str, default="hadamard")
+parser.add_argument('--csv', type=str, default="")
 args = parser.parse_args()
 
 if args.save_appendix == '':
@@ -462,9 +464,10 @@ print('Command line input: ' + cmd_input + ' is saved.')
 with open(log_file, 'a') as f:
     f.write('\n' + cmd_input)
 
-csv = Path("results/")
-csv.mkdir(exist_ok=True)
-csv_file_name = csv / f"{'SEAL' if args.model=='DGCNN' else args.model}_{args.dataset}_{args.fuse}_{int(time.time())}.csv"
+if args.csv:
+    csv = Path(args.csv)
+    csv.mkdir(exist_ok=True)
+    csv_file_name = csv / f"{'SEAL' if args.model=='DGCNN' else args.model}_{args.dataset}_{args.fuse}_hops_{args.num_hops}_layers_{args.num_layers}_pooling_{args.pooling}_{int(time.time())}.csv"
 set_random_seed(args.seed)
 
 
@@ -676,10 +679,10 @@ for run in range(args.runs):
                       node_embedding=emb, fuse=args.fuse).to(device)
     elif args.model == 'SAGE':
         model = SAGE(args.hidden_channels, args.num_layers, max_z, train_dataset,  
-                     args.use_feature, node_embedding=emb, fuse=args.fuse).to(device)
+                     args.use_feature, node_embedding=emb, fuse=args.fuse, pooling=args.pooling).to(device)
     elif args.model == 'GCN':
         model = GCN(args.hidden_channels, args.num_layers, max_z, train_dataset, 
-                    args.use_feature, node_embedding=emb, fuse=args.fuse).to(device)
+                    args.use_feature, node_embedding=emb, fuse=args.fuse, pooling=args.pooling).to(device)
     elif args.model == 'GIN':
         model = GIN(args.hidden_channels, args.num_layers, max_z, train_dataset, 
                     args.use_feature, node_embedding=emb, fuse=args.fuse).to(device)

@@ -11,6 +11,8 @@ def generate_job_array(grid):
         each = {}
         for k1,v1 in zip(keys,v1):
             each[k1] = v1
+        # if int(each["num_hops"])>int(each["num_layers"]):
+        #     continue
         output.append(each)
     return output
 
