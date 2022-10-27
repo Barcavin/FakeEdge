@@ -35,7 +35,10 @@ class GCN(torch.nn.Module):
             self.convs.append(GCNConv(hidden_channels, hidden_channels))
 
         self.dropout = dropout
-        self.lin1 = Linear(hidden_channels, hidden_channels)
+        if fuse == "concat":
+            self.lin1 = Linear(hidden_channels * 2, hidden_channels)
+        else:
+            self.lin1 = Linear(hidden_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
         self.pooling = pooling
@@ -409,6 +412,10 @@ def fake_edge(x, edge_index, edge_mask ,edge_mask_original, edge_weight, batch, 
         x = x_stack.mean(dim=1)
     elif self.fuse=='original':
         x = self.gnn_forward(x,edge_index[:,edge_mask_original],batch,edge_weight_original)
+    elif self.fuse=='concat':
+        x_plus = self.gnn_forward(x,edge_index,batch,edge_weight)
+        x_minus = self.gnn_forward(x,edge_index[:,edge_mask],batch,edge_weight_minus)
+        x = torch.concat([x_plus,x_minus],dim=1)
     elif self.fuse=='minus': # default 'minus'
         x = self.gnn_forward(x,edge_index[:,edge_mask],batch,edge_weight_minus)
     else:

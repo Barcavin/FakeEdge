@@ -182,11 +182,14 @@ class WalkPooling(MessagePassing):
         weights_p = softmax(weights,edge_index[1])
 
         # edge weights of the minus graph
-        weights_m = weights - scatter_max(weights, col, dim=0, dim_size=num_nodes)[0][col]
-        weights_m = torch.exp(weights_m)
-        weights_m = weights_m * edge_mask.view(-1,1)
-        norm = scatter_add(weights_m, col, dim=0, dim_size=num_nodes)[col] + 1e-16
-        weights_m = weights_m / norm
+        # weights_m = weights - scatter_max(weights, col, dim=0, dim_size=num_nodes)[0][col]
+        # weights_m = torch.exp(weights_m)
+        # weights_m = weights_m * edge_mask.view(-1,1)
+        # norm = scatter_add(weights_m, col, dim=0, dim_size=num_nodes)[col] + 1e-16
+        # weights_m = weights_m / norm
+
+        # weights_m = softmax(weights* edge_mask.view(-1,1),edge_index[1]) # this is wrong because weights --> 0 doesn't mean 0 probability but 0 logits.
+        weights_m = softmax(weights[edge_mask],edge_index[1][edge_mask])
 
         return weights_p, weights_m, omega
 
@@ -244,6 +247,7 @@ class WalkPooling(MessagePassing):
         + torch.index_select(omega,0,indices_odd)
         
         #node id of the candidate (or perturbation) link
+        edge_index_m = edge_index[:,edge_mask]
         link_ij, link_ji = edge_index[:,torch.logical_not(edge_mask)]
         node_i = link_ij[indices_odd]
         node_j = link_ij[indices_even]
@@ -259,12 +263,12 @@ class WalkPooling(MessagePassing):
 
             # propagage once
             x_p = self.propagate(edge_index, x= x_p, norm = weights_p[:,head])
-            x_m = self.propagate(edge_index, x= x_m, norm = weights_m[:,head])
+            x_m = self.propagate(edge_index_m, x= x_m, norm = weights_m[:,head])
         
             # start from tau = 2
             for i in range(self.walk_len):
                 x_p = self.propagate(edge_index, x= x_p, norm = weights_p[:,head])
-                x_m = self.propagate(edge_index, x= x_m, norm = weights_m[:,head])
+                x_m = self.propagate(edge_index_m, x= x_m, norm = weights_m[:,head])
                 
                 # returning probabilities around i + j
                 nodelevel_p_w = x_p[node_i,index[node_i].view(-1)] + x_p[node_j,index[node_j].view(-1)]
