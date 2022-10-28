@@ -116,7 +116,10 @@ class SAGE(torch.nn.Module):
             self.convs.append(SAGEConv(hidden_channels, hidden_channels))
 
         self.dropout = dropout
-        self.lin1 = Linear(hidden_channels, hidden_channels)
+        if fuse == "concat":
+            self.lin1 = Linear(hidden_channels * 2, hidden_channels)
+        else:
+            self.lin1 = Linear(hidden_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
         self.pooling = pooling
@@ -250,7 +253,10 @@ class DGCNN(torch.nn.Module):
                             conv1d_kws[1], 1)
         dense_dim = int((self.k - 2) / 2 + 1)
         dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
-        self.lin1 = Linear(dense_dim, 128)
+        if fuse == "concat":
+            self.lin1 = Linear(2*dense_dim, 128)
+        else:
+            self.lin1 = Linear(dense_dim, 128)
         self.lin2 = Linear(128, 1)
 
         self.fuse = fuse
@@ -343,7 +349,10 @@ class GIN(torch.nn.Module):
             in_channels = num_layers * hidden_channels
         else:
             in_channels = hidden_channels
-        self.lin1 = Linear(in_channels, hidden_channels)
+        if fuse == "concat":
+            self.lin1 = Linear(hidden_channels * 2, hidden_channels)
+        else:
+            self.lin1 = Linear(hidden_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
         self.fuse = fuse

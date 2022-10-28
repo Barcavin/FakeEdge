@@ -91,6 +91,7 @@ class BaseModel(object):
         self.predictor = create_predictor_layer(hidden_channels=mlp_hidden_channels,
                                                 num_layers=mlp_num_layers,
                                                 dropout=dropout,
+                                                fuse = self.fusion_type,
                                                 predictor_name=predictor_name).to(device)
 
         # semantic attention
@@ -315,10 +316,15 @@ class BaseModel(object):
             minus = minus[graph.mapping] 
             minus = minus[0] * minus[1] # batch_size x hidden_size
             out = plus * minus
-        # elif self.fusion_type=='concat':
-        #     plus = self.encoder(x, graph.edge_index)[graph.mapping] 
-        #     minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])[graph.mapping] 
-        #     out = self.semantic_att(plus,minus) 
+        elif self.fusion_type=='concat':
+            plus = self.encoder(x, graph.edge_index) # all nodes x D
+            plus = plus[graph.mapping] # 2(src and dst) x batch_size x hidden_size
+            plus = plus[0] * plus[1] # batch_size x hidden_size
+
+            minus = self.encoder(x, graph.edge_index[:,graph.edge_mask])
+            minus = minus[graph.mapping] 
+            minus = minus[0] * minus[1] # batch_size x hidden_size
+            out = torch.concat([plus, minus],dim=1)
         elif self.fusion_type=="original":
             out = self.encoder(x, graph.edge_index[:,graph.edge_mask_original])[graph.mapping]
             out = out[0] * out[1]
@@ -389,14 +395,17 @@ def create_gnn_layer(input_channels, hidden_channels, num_layers, dropout=0, enc
         return SAGE(input_channels, hidden_channels, hidden_channels, num_layers, dropout)
 
 
-def create_predictor_layer(hidden_channels, num_layers, dropout=0, predictor_name='MLP'):
+def create_predictor_layer(hidden_channels, num_layers, dropout, fuse, predictor_name='MLP'):
     predictor_name = predictor_name.upper()
     # if predictor_name == 'DOT':
     #     return DotPredictor()
     # elif predictor_name == 'BIL':
     #     return BilinearPredictor(hidden_channels)
     if predictor_name == 'MLP':
-        return MLPPredictor(hidden_channels, hidden_channels, 1, num_layers, dropout)
+        if fuse == "concat":
+            return MLPPredictor(2*hidden_channels, hidden_channels, 1, num_layers, dropout)
+        else:
+            return MLPPredictor(hidden_channels, hidden_channels, 1, num_layers, dropout)
     # elif predictor_name == 'MLPDOT':
     #     return MLPDotPredictor(hidden_channels, 1, num_layers, dropout)
     # elif predictor_name == 'MLPBIL':

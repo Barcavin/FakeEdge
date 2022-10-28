@@ -224,24 +224,25 @@ class SemanticAttention(nn.Module):
 class ConcatFuse(nn.Module):
     def __init__(self, in_channels, hidden_channels=128, num_layers=3, dropout=.5):
         super(ConcatFuse, self).__init__()
-        self.lins = torch.nn.ModuleList()
-        out_channels = in_channels
-        in_channels = 2 * in_channels
-        for i in range(num_layers):
-            first_channels = in_channels if i == 0 else hidden_channels
-            second_channels = out_channels if i == num_layers - 1 else hidden_channels
-            self.lins.append(torch.nn.Linear(first_channels, second_channels))
-        self.dropout = dropout
+        # self.lins = torch.nn.ModuleList()
+        # out_channels = in_channels
+        # in_channels = 2 * in_channels
+        # for i in range(num_layers):
+        #     first_channels = in_channels if i == 0 else hidden_channels
+        #     second_channels = out_channels if i == num_layers - 1 else hidden_channels
+        #     self.lins.append(torch.nn.Linear(first_channels, second_channels))
+        # self.dropout = dropout
 
     def reset_parameters(self):
-        for lin in self.lins:
-            lin.reset_parameters()
+        # for lin in self.lins:
+        #     lin.reset_parameters()
+        pass
 
     def forward(self, x_i, x_j):
         x1 = torch.cat([x_i, x_j], dim=-1)
-        for lin in self.lins[:-1]:
-            x1 = lin(x1)
-            x1 = F.relu(x1)
-            x1 = F.dropout(x1, p=self.dropout, training=self.training)
-        x1 = self.lins[-1](x1)
+        # for lin in self.lins[:-1]:
+        #     x1 = lin(x1)
+        #     x1 = F.relu(x1)
+        #     x1 = F.dropout(x1, p=self.dropout, training=self.training)
+        # x1 = self.lins[-1](x1)
         return x1

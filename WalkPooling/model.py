@@ -50,12 +50,16 @@ class LinkPred(MessagePassing):
         self.conv1 = GCNConv(in_channels, hidden_channels)
         self.conv2 = GCNConv(hidden_channels, hidden_channels)
 
-        self.wp = WalkPooling(in_channels + hidden_channels*2,\
-            hidden_channels, heads, walk_len)
+        if self.fuse=="concat":
+            self.wp = WalkPooling(2*(in_channels + hidden_channels*2),\
+                hidden_channels, heads, walk_len)
+        else:
+            self.wp = WalkPooling(in_channels + hidden_channels*2,\
+                hidden_channels, heads, walk_len)
 
         L=walk_len*5+1
         if self.fuse=='att':
-            self.att = SemanticAttention(L*heads)
+            self.att = SemanticAttention(in_channels + hidden_channels*2)
             print("Using Fake Edge")
         else:
             self.att = None
@@ -85,29 +89,29 @@ class LinkPred(MessagePassing):
         if self.fuse=='att':
             # plus
             x_out_plus = self.gnn_forward(x,edge_index)
-            #Walk Pooling
-            feature_list_plus = self.wp(x_out_plus, edge_index, edge_mask, batch)
-            
             # minus
             x_out_minus = self.gnn_forward(x,edge_index[:,edge_mask])
+            x_stack = torch.stack((x_out_plus,x_out_minus),dim=1)
+            x_out = self.att(x_stack)
             #Walk Pooling
-            feature_list_minus = self.wp(x_out_minus, edge_index, edge_mask, batch)
+            feature_list = self.wp(x_out, edge_index, edge_mask, batch)
 
-            feature_list_stack = torch.stack((feature_list_plus,feature_list_minus),dim=1)
-            feature_list = self.att(feature_list_stack)
         elif self.fuse=='mean':
             # plus
             x_out_plus = self.gnn_forward(x,edge_index)
-            #Walk Pooling
-            feature_list_plus = self.wp(x_out_plus, edge_index, edge_mask, batch)
-            
             # minus
             x_out_minus = self.gnn_forward(x,edge_index[:,edge_mask])
+            x_out = torch.stack((x_out_plus,x_out_minus),dim=1).mean(dim=1)
             #Walk Pooling
-            feature_list_minus = self.wp(x_out_minus, edge_index, edge_mask, batch)
-
-            feature_list_stack = torch.stack((feature_list_plus,feature_list_minus),dim=1)
-            feature_list = feature_list_stack.mean(dim=1)
+            feature_list = self.wp(x_out, edge_index, edge_mask, batch)
+        elif self.fuse=='concat':
+            # plus
+            x_out_plus = self.gnn_forward(x,edge_index)
+            # minus
+            x_out_minus = self.gnn_forward(x,edge_index[:,edge_mask])
+            x_out = torch.concat([x_out_plus,x_out_minus],dim=1)
+            #Walk Pooling
+            feature_list = self.wp(x_out, edge_index, edge_mask, batch)
         elif self.fuse=='minus':
             # minus
             x_out_minus = self.gnn_forward(x,edge_index[:,edge_mask])
