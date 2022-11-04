@@ -686,6 +686,8 @@ for run in range(args.runs):
     elif args.model == 'GIN':
         model = GIN(args.hidden_channels, args.num_layers, max_z, train_dataset, 
                     args.use_feature, node_embedding=emb, fuse=args.fuse).to(device)
+    elif args.model == 'gMPNN':
+        model = gMPNN(args.hidden_channels, fuse=args.fuse, max_z=max_z, use_feature=args.use_feature).to(device)
     parameters = list(model.parameters())
     if args.train_node_embedding:
         torch.nn.init.xavier_uniform_(emb.weight)

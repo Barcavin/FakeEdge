@@ -5,6 +5,7 @@
 import math
 from types import FunctionType
 import numpy as np
+from scipy.fft import dst
 import torch
 from torch.nn import (ModuleList, Linear, Conv1d, MaxPool1d, Embedding, ReLU, 
                       Sequential, BatchNorm1d as BN)
@@ -350,9 +351,9 @@ class GIN(torch.nn.Module):
         else:
             in_channels = hidden_channels
         if fuse == "concat":
-            self.lin1 = Linear(hidden_channels * 2, hidden_channels)
+            self.lin1 = Linear(in_channels * 2, hidden_channels)
         else:
-            self.lin1 = Linear(hidden_channels, hidden_channels)
+            self.lin1 = Linear(in_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
         self.fuse = fuse
@@ -430,3 +431,84 @@ def fake_edge(x, edge_index, edge_mask ,edge_mask_original, edge_weight, batch, 
     else:
         raise NotImplementedError
     return x
+
+
+
+class gMPNN(torch.nn.Module):
+    def __init__(self, hidden_channels, fuse, max_z, use_feature=False, num_layers=3, dropout=0, out_channels=1):
+        super(gMPNN, self).__init__()
+        self.hidden_channels = hidden_channels
+        self.fuse = fuse
+        self.nn1 = torch.nn.Linear(2, hidden_channels)
+        self.nn2 = torch.nn.Linear(2*hidden_channels, 1)
+        self.max_z = max_z
+        self.use_feature = use_feature
+
+        self.lins = torch.nn.ModuleList()
+        self.lins.append(torch.nn.Linear(1, hidden_channels))
+        for _ in range(num_layers - 2):
+            self.lins.append(torch.nn.Linear(hidden_channels, hidden_channels))
+        self.lins.append(torch.nn.Linear(hidden_channels, out_channels))
+
+        self.dropout = dropout
+        self.z_embedding = Embedding(self.max_z, hidden_channels)
+
+    def reset_parameters(self):
+        for conv in self.convs:
+            conv.reset_parameters()
+
+    def forward(self, z, edge_index, batch, x=None, edge_weight=None, node_id=None, 
+                    edge_mask=None, edge_mask_original=None, return_hidden=False):
+        z_emb = self.z_embedding(z)
+        if self.use_feature:
+            # x = torch.cat([z_emb, x.to(torch.float)], 1)
+            pass
+        else:
+            x = z_emb
+        device = z.device
+        num_nodes = x.shape[0]
+        if self.fuse == 'plus':
+            edge_index_used = edge_index
+        elif self.fuse == 'minus':
+            edge_index_used = edge_index[:,edge_mask]
+        elif self.fuse == 'original':
+            edge_index_used = edge_index[:,edge_mask_original]
+
+        a = torch.sparse.FloatTensor(edge_index_used, torch.ones(edge_index_used.size(1)).to(device),
+                                torch.Size([num_nodes, num_nodes])).to(device)
+        de_2 = torch.sparse.mm(a, a.t())  # distance
+        de_2 = ((torch.ones(num_nodes, num_nodes).to(device) - de_2) > 0).to(device) + de_2
+        de_2 = de_2.to(device)
+        a = a.to(device)
+        f = x @ x.t()
+
+        # forward in gmpnn
+        agg = torch.sparse.mm(a.t(), f)
+        agg = agg + agg.t()
+        agg = agg / (2 * de_2)
+        f = f.reshape(-1,1)
+        agg = agg.reshape(-1, 1)
+        f = self.nn1(torch.cat((f, agg), dim=1)).reshape(num_nodes, num_nodes, self.hidden_channels)
+        f = F.relu(f)
+        a = a.to_dense()
+        agg = torch.einsum('iz,jzk->ijk', a.t(), f)
+        agg += torch.einsum('izk,jz->ijk', f, a)
+        #de_2 = de_2.to_dense()
+        agg = agg/(de_2.reshape(num_nodes, num_nodes, 1).repeat(1, 1, self.hidden_channels))
+        f = f.reshape(-1, self.hidden_channels)
+        agg = agg.reshape(-1, self.hidden_channels)
+        f = self.nn2(torch.cat((f,agg),dim=1)).reshape(num_nodes, num_nodes)
+        _, src_indices = np.unique(batch.cpu().numpy(), return_index=True)
+        dst_indices = src_indices + 1
+        x = f[src_indices, dst_indices].reshape(-1, 1)
+
+        for lin in self.lins[:-1]:
+            x = lin(x)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.lins[-1](x)
+        if return_hidden:
+            return x, None
+        else:
+            return x
+        return torch.sigmoid(x)

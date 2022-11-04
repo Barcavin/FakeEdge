@@ -13,21 +13,23 @@ done
 method=$method
 data=$data
 fuse=$fuse
+[[ -z "${val}" ]] && val='0.05' || val="${val}"
+[[ -z "${test}" ]] && test='0.1' || test="${test}"
 
 if [ "$method" = "SEAL" ]
 then
     echo "Run SEAL"
-    bash seal.sh $method $data $fuse #&& python -c "import wandb;wandb.init(project='FakeEdge', entity='kevindong')"
-elif [ "$method" = "GCN" ] || [ "$method" = "SAGE" ] || [ "$method" = "GIN" ]
+    bash seal.sh $method $data $fuse $val $test #&& python -c "import wandb;wandb.init(project='FakeEdge', entity='kevindong')"
+elif [ "$method" = "GCN" ] || [ "$method" = "SAGE" ] || [ "$method" = "GIN" ] || [ "$method" = "gMPNN" ]
 then
     echo "RUN $method"
-    bash seal.sh $method $data $fuse
+    bash seal.sh $method $data $fuse $val $test
 elif [ "$method" = "WalkPool" ]
 then
     echo "RUN $method"
-    bash walkpooling.sh $data $fuse
+    bash walkpooling.sh $data $fuse $val $test
 elif [ "$method" = "PLNLP" ]
 then
     echo "RUN $method"
-    bash plnlp.sh $data $fuse
+    bash plnlp.sh $data $fuse $val $test
 fi
