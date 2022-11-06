@@ -2,10 +2,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
 import math
 from types import FunctionType
 import numpy as np
 from scipy.fft import dst
+import scipy.sparse as ssp
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.utils.validation import check_is_fitted
+from sklearn.exceptions import NotFittedError
 import torch
 from torch.nn import (ModuleList, Linear, Conv1d, MaxPool1d, Embedding, ReLU, 
                       Sequential, BatchNorm1d as BN)
@@ -13,7 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import (GCNConv, SAGEConv, GINConv, 
                                 global_sort_pool, global_add_pool, global_mean_pool)
-import pdb
+from torch_geometric.utils import degree
 
 
 class GCN(torch.nn.Module):
@@ -512,3 +517,77 @@ class gMPNN(torch.nn.Module):
         else:
             return x
         return torch.sigmoid(x)
+
+class PA(torch.nn.Module):
+    def __init__(self, fuse, tree=False):
+        super(PA, self).__init__()
+        self.fuse = fuse.lower()
+        self.embedding = Embedding(2, 1)
+        self.tree = tree
+        if self.tree:
+            self.clf = DecisionTreeClassifier()
+
+    def forward(self, z, edge_index, batch, x=None, edge_weight=None, node_id=None, 
+                    edge_mask=None, edge_mask_original=None, return_hidden=False):
+        if self.fuse == 'plus':
+            edge_index_used = edge_index
+        elif self.fuse == 'minus':
+            edge_index_used = edge_index[:,edge_mask]
+        elif self.fuse == 'original':
+            edge_index_used = edge_index[:,edge_mask_original]
+        src, dst = edge_index_used
+        d = degree(src, num_nodes=z.size(0))
+        _, src_indices = np.unique(batch.cpu().numpy(), return_index=True)
+        dst_indices = src_indices + 1
+        d_src = d[src_indices]
+        d_dst = d[dst_indices]
+        out = d_src*d_dst
+        if self.tree:
+            try:
+                check_is_fitted(self.clf)
+                out = torch.FloatTensor(self.clf.predict_proba(out.reshape(-1, 1).cpu().numpy())[:,1])
+                return out
+            except NotFittedError:
+                return out
+        else:
+            return out
+
+
+class Jac(torch.nn.Module):
+    def __init__(self, fuse, tree=False):
+        super(Jac, self).__init__()
+        self.fuse = fuse.lower()
+        self.embedding = Embedding(2, 1)
+        self.tree = tree
+        if self.tree:
+            self.clf = DecisionTreeClassifier()
+
+    def forward(self, z, edge_index, batch, x=None, edge_weight=None, node_id=None, 
+                    edge_mask=None, edge_mask_original=None, return_hidden=False):
+        if self.fuse == 'plus':
+            edge_index_used = edge_index
+        elif self.fuse == 'minus':
+            edge_index_used = edge_index[:,edge_mask]
+        elif self.fuse == 'original':
+            edge_index_used = edge_index[:,edge_mask_original]
+        num_nodes = z.size(0)
+        edge_weight = torch.ones(edge_index_used.size(1), dtype=int).cpu()
+        edge_index_used = edge_index_used.cpu()
+
+        A = ssp.csr_matrix((edge_weight, (edge_index_used[0], edge_index_used[1])), 
+                        shape=(num_nodes, num_nodes))
+        _, src_indices = np.unique(batch.cpu().numpy(), return_index=True)
+        dst_indices = src_indices + 1
+        cn = torch.LongTensor(np.array(np.sum(A[src_indices].multiply(A[dst_indices]), 1)).flatten())
+        union = torch.LongTensor(np.array(np.sum(A[src_indices] + A[dst_indices] > 0, 1)).flatten())
+        jac = cn/union
+        out = torch.nan_to_num(jac,0,0,0)
+        if self.tree:
+            try:
+                check_is_fitted(self.clf)
+                out = torch.FloatTensor(self.clf.predict_proba(out.reshape(-1, 1).cpu().numpy())[:,1])
+                return out
+            except NotFittedError:
+                return out
+        else:
+            return out

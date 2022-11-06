@@ -25,7 +25,7 @@ from torch_sparse import coalesce
 import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid
 from torch_geometric.data import Data, Dataset, InMemoryDataset, DataLoader
-from torch_geometric.utils import to_networkx, to_undirected
+from torch_geometric.utils import to_networkx, to_undirected, degree
 from torch_geometric.nn import GCNConv, GATConv, SGConv, ChebConv, GINConv, GATConv, SAGEConv, GATv2Conv
 
 from ogb.linkproppred import PygLinkPropPredDataset, Evaluator
@@ -162,6 +162,59 @@ class SEALDynamicDataset(Dataset):
 
         return data
 
+
+def train_heuristic():
+    if model.tree:
+        pbar = tqdm(train_loader, ncols=70)
+        y_pred, y_true = [], []
+        for data in pbar:
+            data = data.to(device)
+            x = None
+            edge_weight =  None
+            node_id = data.node_id if emb else None
+            logits = model(data.z, data.edge_index, data.batch, x, edge_weight, node_id, data.edge_mask, data.edge_mask_original)
+            y_pred.append(logits.view(-1).cpu())
+            y_true.append(data.y.view(-1).cpu().to(torch.long))
+        val_pred, val_true = torch.cat(y_pred), torch.cat(y_true)
+        model.clf.fit(val_pred.reshape(-1,1), val_true)
+    return 0
+
+def test_heuristic(write_out_file=None):
+    y_pred, y_true, val_h = [], [], []
+    for data in tqdm(val_loader, ncols=70):
+        data = data.to(device)
+        x = data.x if args.use_feature else None
+        edge_weight = data.edge_weight if args.use_edge_weight else None
+        node_id = data.node_id if emb else None
+        logits = model(data.z, data.edge_index, data.batch, x, edge_weight, node_id, data.edge_mask, data.edge_mask_original, False)
+        y_pred.append(logits.view(-1).cpu())
+        y_true.append(data.y.view(-1).cpu().to(torch.float))
+    val_pred, val_true = torch.cat(y_pred), torch.cat(y_true)
+    pos_val_pred = val_pred[val_true==1]
+    neg_val_pred = val_pred[val_true==0]
+
+    y_pred, y_true, test_h = [], [], []
+    for data in tqdm(test_loader, ncols=70):
+        data = data.to(device)
+        x = data.x if args.use_feature else None
+        edge_weight = data.edge_weight if args.use_edge_weight else None
+        node_id = data.node_id if emb else None
+        logits = model(data.z, data.edge_index, data.batch, x, edge_weight, node_id, data.edge_mask, data.edge_mask_original, False)
+        y_pred.append(logits.view(-1).cpu())
+        y_true.append(data.y.view(-1).cpu().to(torch.float))
+    test_pred, test_true = torch.cat(y_pred), torch.cat(y_true)
+    pos_test_pred = test_pred[test_true==1]
+    neg_test_pred = test_pred[test_true==0]
+
+    y_true = []
+    if args.eval_metric == 'hits':
+        results = evaluate_hits(pos_val_pred, neg_val_pred, pos_test_pred, neg_test_pred)
+    elif args.eval_metric == 'mrr':
+        results = evaluate_mrr(pos_val_pred, neg_val_pred, pos_test_pred, neg_test_pred)
+    elif args.eval_metric == 'auc':
+        results = evaluate_auc(val_pred, val_true, test_pred, test_true)
+
+    return results
 
 def train():
     model.train()
@@ -581,7 +634,17 @@ for run in range(args.runs):
             with open(log_file, 'a') as f:
                 print(key, file=f)
                 loggers[key].print_statistics(f=f)
-        pdb.set_trace()
+        csv={}
+        for key in loggers.keys():
+            print(key)
+            csv[key] = loggers[key].print_statistics(0)
+            with open(log_file, 'a') as f:
+                print(key, file=f)
+                loggers[key].print_statistics(0, f=f)
+        if args.csv:
+            with open(csv_file_name, 'a') as f:
+                for i in range(10):
+                    f.write(json.dumps(csv) + '\n')
         exit()
 
 
@@ -656,12 +719,6 @@ for run in range(args.runs):
 
     max_z = 1000  # set a large max_z so that every z has embeddings to look up
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, 
-                            shuffle=True, num_workers=args.num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, 
-                            num_workers=args.num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, 
-                            num_workers=args.num_workers)
 
     if args.train_node_embedding:
         emb = torch.nn.Embedding(data.num_nodes, args.hidden_channels).to(device)
@@ -672,7 +729,7 @@ for run in range(args.runs):
     else:
         emb = None
 
-
+    heuristics = False
     if args.model == 'DGCNN':
         model = DGCNN(args.hidden_channels, args.num_layers, max_z, args.sortpool_k, 
                       train_dataset, args.dynamic_train, GNN=eval(args.GNN),use_feature=args.use_feature, 
@@ -688,6 +745,28 @@ for run in range(args.runs):
                     args.use_feature, node_embedding=emb, fuse=args.fuse).to(device)
     elif args.model == 'gMPNN':
         model = gMPNN(args.hidden_channels, fuse=args.fuse, max_z=max_z, use_feature=args.use_feature).to(device)
+    elif args.model == "PA":
+        model = PA(args.fuse)
+        heuristics = True
+        args.epochs = 1
+    elif args.model == "Jac":
+        model = Jac(args.fuse)
+        heuristics = True
+        args.epochs = 1
+    elif args.model == "PA+DT":
+        model = PA(args.fuse, True)
+        heuristics = True
+        args.epochs = 1
+    elif args.model == "Jac+DT":
+        model = Jac(args.fuse, True)
+        heuristics = True
+        args.epochs = 1
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, 
+                            shuffle=True, num_workers=args.num_workers)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, 
+                            num_workers=args.num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, 
+                            num_workers=args.num_workers)
     parameters = list(model.parameters())
     if args.train_node_embedding:
         torch.nn.init.xavier_uniform_(emb.weight)
@@ -759,10 +838,16 @@ for run in range(args.runs):
 
     # Training starts
     for epoch in range(start_epoch, start_epoch + args.epochs):
-        loss = train()
+        if heuristics:
+            loss = train_heuristic()
+        else:
+            loss = train()
 
         if epoch % args.eval_steps == 0:
-            results = test()
+            if heuristics:
+                results = test_heuristic()
+            else:
+                results = test()
             for key, result in results.items():
                 loggers[key].add_result(run, result)
 

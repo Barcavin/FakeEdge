@@ -17,7 +17,7 @@ from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import (add_self_loops, from_scipy_sparse_matrix,
                                    is_undirected, negative_sampling,
-                                   to_undirected, train_test_split_edges)
+                                   to_undirected, train_test_split_edges, degree)
 from torch_sparse import spspmm
 from tqdm import tqdm
 
