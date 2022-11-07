@@ -527,30 +527,32 @@ class PA(torch.nn.Module):
         if self.tree:
             self.clf = DecisionTreeClassifier()
 
-    def forward(self, z, edge_index, batch, x=None, edge_weight=None, node_id=None, 
-                    edge_mask=None, edge_mask_original=None, return_hidden=False):
+    def forward(self, A, edge_index, y):
+        d = np.array(A.sum(axis=1)).reshape(-1)
+        src, dst = edge_index
+        d_src = d[src]
+        d_dst = d[dst]
         if self.fuse == 'plus':
-            edge_index_used = edge_index
+            if y == 1:
+                out = d_src*d_dst
+            else:
+                out = (d_src+1)*(d_dst+1)
         elif self.fuse == 'minus':
-            edge_index_used = edge_index[:,edge_mask]
+            if y == 1:
+                out = (d_src-1)*(d_dst-1)
+            else:
+                out = d_src*d_dst
         elif self.fuse == 'original':
-            edge_index_used = edge_index[:,edge_mask_original]
-        src, dst = edge_index_used
-        d = degree(src, num_nodes=z.size(0))
-        _, src_indices = np.unique(batch.cpu().numpy(), return_index=True)
-        dst_indices = src_indices + 1
-        d_src = d[src_indices]
-        d_dst = d[dst_indices]
-        out = d_src*d_dst
+            out = d_src*d_dst
         if self.tree:
             try:
                 check_is_fitted(self.clf)
-                out = torch.FloatTensor(self.clf.predict_proba(out.reshape(-1, 1).cpu().numpy())[:,1])
+                out = torch.FloatTensor(self.clf.predict_proba(out.reshape(-1, 1))[:,1])
                 return out
             except NotFittedError:
-                return out
+                return torch.LongTensor(out)
         else:
-            return out
+            return torch.LongTensor(out)
 
 
 class Jac(torch.nn.Module):
@@ -562,24 +564,21 @@ class Jac(torch.nn.Module):
         if self.tree:
             self.clf = DecisionTreeClassifier()
 
-    def forward(self, z, edge_index, batch, x=None, edge_weight=None, node_id=None, 
-                    edge_mask=None, edge_mask_original=None, return_hidden=False):
+    def forward(self, A, edge_index, y):
+        src, dst = edge_index
+        cn = torch.LongTensor(np.array(np.sum(A[src].multiply(A[dst]), 1)).flatten())
         if self.fuse == 'plus':
-            edge_index_used = edge_index
+            if y == 1:
+                union = torch.LongTensor(np.array(np.sum(A[src] + A[dst] > 0, 1)).flatten())
+            else:
+                union = torch.LongTensor(np.array(np.sum(A[src] + A[dst] > 0, 1) + 2).flatten())
         elif self.fuse == 'minus':
-            edge_index_used = edge_index[:,edge_mask]
+            if y == 1:
+                union = torch.LongTensor(np.array(np.sum(A[src] + A[dst] > 0, 1)-2).flatten())
+            else:
+                union = torch.LongTensor(np.array(np.sum(A[src] + A[dst] > 0, 1)).flatten())
         elif self.fuse == 'original':
-            edge_index_used = edge_index[:,edge_mask_original]
-        num_nodes = z.size(0)
-        edge_weight = torch.ones(edge_index_used.size(1), dtype=int).cpu()
-        edge_index_used = edge_index_used.cpu()
-
-        A = ssp.csr_matrix((edge_weight, (edge_index_used[0], edge_index_used[1])), 
-                        shape=(num_nodes, num_nodes))
-        _, src_indices = np.unique(batch.cpu().numpy(), return_index=True)
-        dst_indices = src_indices + 1
-        cn = torch.LongTensor(np.array(np.sum(A[src_indices].multiply(A[dst_indices]), 1)).flatten())
-        union = torch.LongTensor(np.array(np.sum(A[src_indices] + A[dst_indices] > 0, 1)).flatten())
+            union = torch.LongTensor(np.array(np.sum(A[src] + A[dst] > 0, 1)).flatten())
         jac = cn/union
         out = torch.nan_to_num(jac,0,0,0)
         if self.tree:

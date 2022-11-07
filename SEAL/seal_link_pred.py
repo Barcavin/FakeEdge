@@ -165,46 +165,36 @@ class SEALDynamicDataset(Dataset):
 
 def train_heuristic():
     if model.tree:
-        pbar = tqdm(train_loader, ncols=70)
-        y_pred, y_true = [], []
-        for data in pbar:
-            data = data.to(device)
-            x = None
-            edge_weight =  None
-            node_id = data.node_id if emb else None
-            logits = model(data.z, data.edge_index, data.batch, x, edge_weight, node_id, data.edge_mask, data.edge_mask_original)
-            y_pred.append(logits.view(-1).cpu())
-            y_true.append(data.y.view(-1).cpu().to(torch.long))
-        val_pred, val_true = torch.cat(y_pred), torch.cat(y_true)
-        model.clf.fit(val_pred.reshape(-1,1), val_true)
+        # Test link prediction heuristics.
+        pos_edge, neg_edge = get_pos_neg_edges("train", split_edge, 
+                                               data.edge_index, 
+                                               data.num_nodes, 
+                                               100)
+        pos_logits = model(A,pos_edge,1)
+        neg_logits = model(A,neg_edge,0)
+        logits = torch.cat([pos_logits,neg_logits])
+        y = torch.cat([torch.ones(pos_logits.size(0)),torch.zeros(neg_logits.size(0))])
+        model.clf.fit(logits.reshape(-1,1), y)
     return 0
 
 def test_heuristic(write_out_file=None):
-    y_pred, y_true, val_h = [], [], []
-    for data in tqdm(val_loader, ncols=70):
-        data = data.to(device)
-        x = data.x if args.use_feature else None
-        edge_weight = data.edge_weight if args.use_edge_weight else None
-        node_id = data.node_id if emb else None
-        logits = model(data.z, data.edge_index, data.batch, x, edge_weight, node_id, data.edge_mask, data.edge_mask_original, False)
-        y_pred.append(logits.view(-1).cpu())
-        y_true.append(data.y.view(-1).cpu().to(torch.float))
-    val_pred, val_true = torch.cat(y_pred), torch.cat(y_true)
-    pos_val_pred = val_pred[val_true==1]
-    neg_val_pred = val_pred[val_true==0]
+    pos_edge, neg_edge = get_pos_neg_edges("valid", split_edge, 
+                                               data.edge_index, 
+                                               data.num_nodes, 
+                                               100)
+    pos_val_pred = model(A,pos_edge,0)
+    neg_val_pred = model(A,neg_edge,0)
+    val_pred = torch.cat([pos_val_pred,neg_val_pred])
+    val_true = torch.cat([torch.ones(pos_val_pred.size(0)),torch.zeros(neg_val_pred.size(0))])
 
-    y_pred, y_true, test_h = [], [], []
-    for data in tqdm(test_loader, ncols=70):
-        data = data.to(device)
-        x = data.x if args.use_feature else None
-        edge_weight = data.edge_weight if args.use_edge_weight else None
-        node_id = data.node_id if emb else None
-        logits = model(data.z, data.edge_index, data.batch, x, edge_weight, node_id, data.edge_mask, data.edge_mask_original, False)
-        y_pred.append(logits.view(-1).cpu())
-        y_true.append(data.y.view(-1).cpu().to(torch.float))
-    test_pred, test_true = torch.cat(y_pred), torch.cat(y_true)
-    pos_test_pred = test_pred[test_true==1]
-    neg_test_pred = test_pred[test_true==0]
+    pos_edge, neg_edge = get_pos_neg_edges("test", split_edge, 
+                                               data.edge_index, 
+                                               data.num_nodes, 
+                                               100)
+    pos_test_pred = model(A,pos_edge,0)
+    neg_test_pred = model(A,neg_edge,0)
+    test_pred = torch.cat([pos_test_pred,neg_test_pred])
+    test_true = torch.cat([torch.ones(pos_test_pred.size(0)),torch.zeros(neg_test_pred.size(0))])
 
     y_true = []
     if args.eval_metric == 'hits':
@@ -590,7 +580,11 @@ for run in range(args.runs):
     # if args.dataset.startswith('ogbl'):
         
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    num_nodes = data.num_nodes
+    edge_weight = torch.ones(data.edge_index.size(1), dtype=int)
 
+    A = ssp.csr_matrix((edge_weight, (data.edge_index[0], data.edge_index[1])), 
+                    shape=(num_nodes, num_nodes))
     if args.use_heuristic:
         # Test link prediction heuristics.
         num_nodes = data.num_nodes

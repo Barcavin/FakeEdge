@@ -19,7 +19,7 @@ conda activate graph_env
 
 # USAir NS Power Celegans Router PB Ecoli Yeast
 # wandb agent kevindong/FakeEdge/d9iz6g9u\
-export job_id=Aug13
+export job_id=rebuttal
 bash main.sh $(python get_parameters.py --id=$job_id)
 until [ $(($(wc -l < $job_id.job))) -lt 1 ];
 do

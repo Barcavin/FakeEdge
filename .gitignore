@@ -147,3 +147,7 @@ results/
 *.pt
 *.txt
 ablation/
+training_20/
+*.job
+*.grid
+*.ipynb

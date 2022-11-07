@@ -9,7 +9,7 @@
             "type": "python",
             "request": "attach",
             "connect": {
-                "host": "qa-1080ti-007.crc.nd.edu",
+                "host": "qa-1080ti-005.crc.nd.edu",
                 "port": 5678
             },
             "pathMappings": [
