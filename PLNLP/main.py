@@ -59,7 +59,7 @@ def argument():
     parser.add_argument('--use_valedges_as_input', type=str2bool, default=False)
     parser.add_argument('--eval_last_best', type=str2bool, default=True)
     parser.add_argument('--write_out', type=str2bool, default=False)
-    parser.add_argument('--csv', type=str2bool, default=False)
+    parser.add_argument('--csv', type=str, default='')
 
     args = parser.parse_args()
     return args
@@ -95,9 +95,10 @@ def main():
     res_dir.mkdir(exist_ok=True)
     log_file_name = 'log_' + args.data_name + '_' + str(int(time.time())) + '.txt'
     log_file = res_dir / log_file_name
-    csv = Path("results/")
-    csv.mkdir(exist_ok=True)
-    csv_file_name = csv / f"PLNLP_{args.data_name}_{args.fusion}_{int(time.time())}.csv"
+    if args.csv:
+        csv = Path(args.csv)
+        csv.mkdir(exist_ok=True)
+        csv_file_name = csv / f"PLNLP_{args.data_name}_{args.fusion}_{int(time.time())}.csv"
 
     # wandb.run.summary["log_file"] = str(log_file)
     with open(log_file, 'a') as f:

@@ -4,7 +4,7 @@ name=$2
 fuse=$3
 val=$4
 test=$5
-csv_dir=results
+csv_dir=$6
 
 if [[ $method = SEAL ]]
 then
