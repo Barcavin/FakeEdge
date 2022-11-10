@@ -98,6 +98,7 @@ parser.add_argument('--MSE', type=str2bool, default=False)
 parser.add_argument('--log', type=str, default=None,
                     help='log by tensorboard, default is None')
 parser.add_argument('--csv',type=str, default=None)                
+parser.add_argument('--time',type=str, default=str(int(time.time())))                
 
 args = parser.parse_args()
 
@@ -146,9 +147,10 @@ print ("{:<13}|{:<13}|{:<13}|{:<8}|{:<13}|{:<8}|{:<15}"\
         args.epoch_num,args.walk_len, args.heads, args.hidden_channels))
 print ("-"*105)
 
-csv = Path("results/")
-csv.mkdir(exist_ok=True)
-csv_file_name = csv / f"WalkPool_{args.data_name}_{args.fuse}_{args.csv}.csv"
+if args.csv:
+    csv = Path(args.csv)
+    csv.mkdir(exist_ok=True)
+    csv_file_name = csv / f"WalkPool_{args.data_name}_{args.fuse}_{args.time}.csv"
 
 walk_len = args.walk_len
 heads = args.heads
