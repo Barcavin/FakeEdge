@@ -510,7 +510,7 @@ with open(log_file, 'a') as f:
 if args.csv:
     csv = Path(args.csv)
     csv.mkdir(exist_ok=True)
-    csv_file_name = csv / f"{'SEAL' if args.model=='DGCNN' else args.model}_{args.dataset}_{args.fuse}_hops_{args.num_hops}_layers_{args.num_layers}_pooling_{args.pooling}_{int(time.time())}.csv"
+    csv_file_name = csv / f"{'SEAL' if args.model=='DGCNN' else args.model}_{args.dataset}_{args.fuse}_hops_{args.num_hops}_layers_{args.num_layers}_pooling_{args.pooling}_jobID_{os.getenv('JOB_ID','None')}_{int(time.time())}.csv"
 set_random_seed(args.seed)
 
 
