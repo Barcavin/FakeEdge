@@ -93,12 +93,18 @@ parser.add_argument('--heads', type=int, default=2,
                     help='using multi-heads in the attention link weight encoder ')
 parser.add_argument('--hidden-channels', type=int, default=32)
 parser.add_argument('--batch-size', type=int, default=32)
-parser.add_argument('--epoch-num', type=int, default=50)
+parser.add_argument('--epoch-num', type=int, default=20)
 parser.add_argument('--MSE', type=str2bool, default=False)
 parser.add_argument('--log', type=str, default=None,
                     help='log by tensorboard, default is None')
 parser.add_argument('--csv',type=str, default=None)                
 parser.add_argument('--time',type=str, default=str(int(time.time())))                
+parser.add_argument('--omega',type=int, default=1)                
+parser.add_argument('--graphlevel',type=int, default=1)                
+parser.add_argument('--nodelevel_p',type=int, default=1)                
+parser.add_argument('--nodelevel_m',type=int, default=1)                
+parser.add_argument('--linklevel_p',type=int, default=1)                
+parser.add_argument('--linklevel_m',type=int, default=1)                
 
 args = parser.parse_args()
 
@@ -147,10 +153,10 @@ print ("{:<13}|{:<13}|{:<13}|{:<8}|{:<13}|{:<8}|{:<15}"\
         args.epoch_num,args.walk_len, args.heads, args.hidden_channels))
 print ("-"*105)
 
-if args.csv:
-    csv = Path(args.csv)
-    csv.mkdir(exist_ok=True)
-    csv_file_name = csv / f"WalkPool_{args.data_name}_{args.fuse}_{args.time}.csv"
+csv = Path("results")
+csv.mkdir(exist_ok=True)
+# csv_file_name = csv / f"WalkPool_{args.data_name}_{args.fuse}_{args.time}.csv"
+csv_file_name = csv / f"WalkPool_{args.data_name}.csv"
 
 walk_len = args.walk_len
 heads = args.heads
@@ -180,7 +186,7 @@ print("Dimention of features after concatenation:",num_features)
 set_random_seed(args.seed)
 
 model = LinkPred(in_channels = num_features, hidden_channels = hidden_channels,\
-    heads = heads, walk_len = walk_len, drnl = args.drnl,z_max = z_max, MSE= args.MSE, fuse = args.fuse).to(device)
+    heads = heads, walk_len = walk_len, drnl = args.drnl,z_max = z_max, MSE= args.MSE, fuse = args.fuse, args=args).to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=lr,weight_decay=weight_decay)
 criterion = torch.nn.MSELoss(reduction='mean')
@@ -285,11 +291,16 @@ print(f'From AUC: Final Test AUC: {Final_Test_AUC_fromAUC:.4f}, Final Test AP: {
 for key,value in Best_Test_Hits.items():
     print(f"Final Test {key}:{value:.4f}")
 
-if args.csv:
-    csv = {
-        'aucroc': Final_Test_AUC_fromAUC,
-        'aucpr': Final_Test_AP_fromAUC,
-        **Best_Test_Hits
-    }
-    with open(csv_file_name, 'a') as f:
-        f.write(json.dumps(csv) + '\n')
+csv = {
+    'omega':args.omega,
+    'graphlevel':args.graphlevel,
+    'nodelevel_p':args.nodelevel_p,
+    'nodelevel_m':args.nodelevel_m,
+    'linklevel_p':args.linklevel_p,
+    'linklevel_m':args.linklevel_m,
+    'aucroc': Final_Test_AUC_fromAUC,
+    'aucpr': Final_Test_AP_fromAUC,
+    **Best_Test_Hits
+}
+with open(csv_file_name, 'a') as f:
+    f.write(json.dumps(csv) + '\n')

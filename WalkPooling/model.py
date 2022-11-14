@@ -39,7 +39,7 @@ class SemanticAttention(nn.Module):
 
 class LinkPred(MessagePassing):
     def __init__(self, in_channels: int, hidden_channels: int, heads: int = 1,\
-                 walk_len: int = 6, drnl: bool = False, z_max: int =100, MSE: bool=True, fuse: str=None):
+                 walk_len: int = 6, drnl: bool = False, z_max: int =100, MSE: bool=True, fuse: str=None, args = None):
         super(LinkPred, self).__init__()
 
         self.drnl = drnl
@@ -55,9 +55,15 @@ class LinkPred(MessagePassing):
                 hidden_channels, heads, walk_len)
         else:
             self.wp = WalkPooling(in_channels + hidden_channels*2,\
-                hidden_channels, heads, walk_len)
+                hidden_channels, heads, walk_len, args)
 
-        L=walk_len*5+1
+        self.args = args
+        self.omega = args.omega
+        length_per_level = 0
+        for level in ["graphlevel","nodelevel_p","linklevel_p","nodelevel_m","linklevel_m"]:
+            setattr(self,level,getattr(args,level))
+            length_per_level += getattr(args,level)
+        L=walk_len*length_per_level + self.omega
         if self.fuse=='att':
             self.att = SemanticAttention(in_channels + hidden_channels*2)
             print("Using Fake Edge")
@@ -142,12 +148,18 @@ class LinkPred(MessagePassing):
 
 class WalkPooling(MessagePassing):
     def __init__(self, in_channels: int, hidden_channels: int, heads: int = 1,\
-                 walk_len: int = 6):
+                 walk_len: int = 6, args=None):
         super(WalkPooling, self).__init__()
 
         self.hidden_channels = hidden_channels
         self.heads = heads
         self.walk_len = walk_len
+        self.args = args
+        self.omega = args.omega
+        length_per_level = 0
+        for level in ["graphlevel","nodelevel_p","linklevel_p","nodelevel_m","linklevel_m"]:
+            setattr(self,level,getattr(args,level))
+            length_per_level += getattr(args,level)
 
         # the linear layers in the attention encoder
         self.lin_key1 = Linear(in_channels, hidden_channels)
@@ -295,12 +307,21 @@ class WalkPooling(MessagePassing):
 
                 graphlevel[:,head*self.walk_len+i] = (graphlevel_p-graphlevel_m).view(-1)
          
-        feature_list = graphlevel 
-        feature_list = torch.cat((feature_list,omega),dim=1)
-        feature_list = torch.cat((feature_list,nodelevel_p),dim=1)
-        feature_list = torch.cat((feature_list,nodelevel_m),dim=1)
-        feature_list = torch.cat((feature_list,linklevel_p),dim=1)
-        feature_list = torch.cat((feature_list,linklevel_m),dim=1)
+        feature_list = []
+        if self.omega:
+            feature_list.append(omega)
+        if self.graphlevel:
+            feature_list.append(graphlevel)
+        if self.nodelevel_p:
+            feature_list.append(nodelevel_p)
+        if self.nodelevel_m:
+            feature_list.append(nodelevel_m)
+        if self.linklevel_p:
+            feature_list.append(linklevel_p)
+        if self.linklevel_m:
+            feature_list.append(linklevel_m)
+
+        feature_list = torch.cat(feature_list,dim=1)
 
 
         return feature_list

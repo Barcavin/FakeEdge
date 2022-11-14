@@ -5,10 +5,10 @@
 #$ -N FEdge
 #$ -l gpu_card=1
 
-module load conda cuda/11.0
+#module load conda cuda/11.0
 
-conda deactivate
-conda activate graph_env
+#conda deactivate
+#conda activate graph_env
 
 # bash seal.sh pubmed plus
 # plus
@@ -19,9 +19,8 @@ conda activate graph_env
 
 # USAir NS Power Celegans Router PB Ecoli Yeast
 # wandb agent kevindong/FakeEdge/d9iz6g9u\
-export job_id=rebuttal
-bash main.sh $(python get_parameters.py --id=$job_id)
+export job_id=Power_ablation
 until [ $(($(wc -l < $job_id.job))) -lt 1 ];
 do
-    bash main.sh $(python get_parameters.py --id=$job_id)
+    python WalkPooling/main.py --seed 0 --use-splitted false --data-name Power --drnl 0 --init-attribute ones --init-representation none --embedding-dim 16 --practical-neg-sample true --fuse=plus $(python get_parameters.py --id=$job_id)
 done
