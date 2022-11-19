@@ -17,7 +17,7 @@ from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import (add_self_loops, from_scipy_sparse_matrix,
                                    is_undirected, negative_sampling,
-                                   to_undirected, train_test_split_edges, degree)
+                                   to_undirected, train_test_split_edges, degree, subgraph)
 from torch_sparse import spspmm
 from tqdm import tqdm
 
@@ -153,30 +153,6 @@ def de_plus_node_labeling(adj, src, dst, max_dist=100):
 
 
 def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl', plus=False):
-    # Construct a pytorch_geometric graph from a scipy csr adjacency matrix.
-    u, v, r = ssp.find(adj)
-    num_nodes = adj.shape[0]
-    
-    node_ids = torch.LongTensor(node_ids)
-    u, v = torch.LongTensor(u), torch.LongTensor(v)
-    r = torch.LongTensor(r)
-    edge_index = torch.stack([u, v], 0)
-    edge_mask = torch.ones_like(u,dtype=torch.bool)
-    edge_mask_original = torch.ones_like(u,dtype=torch.bool)
-
-    # src,dst --> 0,1
-    ind = torch.where((edge_index == torch.LongTensor([0,1]).view(-1,1)).all(dim=0))
-    edge_mask[ind[0]] = False
-    if plus: # if plus, the edge not belong to the original graph, thus masked
-        edge_mask_original[ind[0]] = False
-    
-    ind = torch.where((edge_index == torch.LongTensor([1,0]).view(-1,1)).all(dim=0))
-    edge_mask[ind[0]] = False
-    if plus:
-        edge_mask_original[ind[0]] = False
-
-    edge_weight = r.to(torch.float)
-    y = torch.tensor([y])
     if node_label == 'drnl':  # DRNL
         z = drnl_node_labeling(adj, 0, 1)
     elif node_label == 'hop':  # mininum distance to src and dst
@@ -194,6 +170,40 @@ def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl
         z[z>100] = 100  # limit the maximum label to 100
     else:
         z = torch.zeros(len(dists), dtype=torch.long)
+    # Construct a pytorch_geometric graph from a scipy csr adjacency matrix.
+    u, v, r = ssp.find(adj)
+    node_ids = torch.LongTensor(node_ids)
+    u, v = torch.LongTensor(u), torch.LongTensor(v)
+    r = torch.LongTensor(r)
+    edge_index = torch.stack([u, v], 0)
+    # check if we can discard those nodes only connected to one of the target nodes
+    keepnodes = (z>0).argwhere().flatten()
+    edge_index, r, _ = subgraph(keepnodes, edge_index, r, relabel_nodes=True,return_edge_mask=True)
+    node_ids = node_ids[keepnodes]
+    if node_features:
+        node_features = node_features[keepnodes]
+    u,v = edge_index
+    z = z[keepnodes]
+
+    num_nodes = edge_index.max().item() + 1
+    
+
+    edge_mask = torch.ones_like(u,dtype=torch.bool)
+    edge_mask_original = torch.ones_like(u,dtype=torch.bool)
+
+    # src,dst --> 0,1
+    ind = torch.where((edge_index == torch.LongTensor([0,1]).view(-1,1)).all(dim=0))
+    edge_mask[ind[0]] = False
+    if plus: # if plus, the edge not belong to the original graph, thus masked
+        edge_mask_original[ind[0]] = False
+    
+    ind = torch.where((edge_index == torch.LongTensor([1,0]).view(-1,1)).all(dim=0))
+    edge_mask[ind[0]] = False
+    if plus:
+        edge_mask_original[ind[0]] = False
+
+    edge_weight = r.to(torch.float)
+    y = torch.tensor([y])
     data = Data(node_features, edge_index, edge_weight=edge_weight, y=y, z=z, 
                 node_id=node_ids, num_nodes=num_nodes, edge_mask=edge_mask, edge_mask_original=edge_mask_original)
     return data
