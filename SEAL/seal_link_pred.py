@@ -34,6 +34,7 @@ import warnings
 from scipy.sparse import SparseEfficiencyWarning
 warnings.simplefilter('ignore', SparseEfficiencyWarning)
 warnings.simplefilter('ignore', UserWarning)
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 from utils import *
 from models import *
@@ -450,7 +451,7 @@ parser.add_argument('--dynamic_train', action='store_true',
                     help="dynamically extract enclosing subgraphs on the fly")
 parser.add_argument('--dynamic_val', action='store_true')
 parser.add_argument('--dynamic_test', action='store_true')
-parser.add_argument('--num_workers', type=int, default=16, 
+parser.add_argument('--num_workers', type=int, default=0, 
                     help="number of workers for dynamic mode; 0 if not dynamic")
 parser.add_argument('--train_node_embedding', action='store_true', 
                     help="also train free-parameter node embeddings together with GNN")
@@ -510,7 +511,7 @@ with open(log_file, 'a') as f:
 if args.csv:
     csv = Path(args.csv)
     csv.mkdir(exist_ok=True)
-    csv_file_name = csv / f"{'SEAL' if args.model=='DGCNN' else args.model}_{args.dataset}_{args.fuse}_hops_{args.num_hops}_layers_{args.num_layers}_pooling_{args.pooling}_jobID_{os.getenv('JOB_ID','None')}_{int(time.time())}.csv"
+    csv_file_name = csv / f"{'SEAL' if args.model=='DGCNN' else args.model}_{args.dataset}_{args.fuse}_hops_{args.num_hops}_layers_{args.num_layers}_pooling_{args.pooling}_jobID_{os.getenv('JOB_ID','None')}_PID_{os.getpid()}_{int(time.time())}.csv"
 set_random_seed(args.seed)
 
 
